@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IPS Report Generator — SCCL / NHS Supply Chain</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --navy: #1F3864;
+    --mid-blue: #2E75B6;
+    --steel: #4472C4;
+    --pale: #EEF2FA;
+    --light: #D9E1F2;
+    --ink: #1A1A2E;
+    --paper: #F7F8FA;
+    --line: #D4DCE8;
+    --green: #1D9E75;
+    --amber: #BA7517;
+    --red: #C0392B;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background:
+      radial-gradient(circle at 12% 8%, rgba(46,117,182,0.06), transparent 40%),
+      radial-gradient(circle at 88% 92%, rgba(31,56,100,0.05), transparent 40%),
+      var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+  .topbar {
+    background: linear-gradient(120deg, var(--navy), #16284a);
+    color: #fff;
+    padding: 26px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 20px rgba(31,56,100,0.25);
+  }
+  .topbar .brand { display: flex; align-items: center; gap: 16px; }
+  .shield {
+    width: 42px; height: 42px;
+    border: 2px solid rgba(157,195,230,0.6);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 18px; color: #9DC3E6;
+    background: rgba(157,195,230,0.08);
+  }
+  .topbar h1 { font-size: 19px; font-weight: 600; letter-spacing: 0.2px; }
+  .topbar .sub { font-size: 12px; color: #9DC3E6; margin-top: 2px; }
+  .topbar .badge {
+    font-size: 11px; padding: 5px 12px; border-radius: 20px;
+    background: rgba(255,255,255,0.1); color: #BDD7EE;
+    border: 0.5px solid rgba(189,215,238,0.3);
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  .drop {
+    border: 2px dashed var(--line);
+    border-radius: 18px;
+    background: #fff;
+    padding: 56px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.22s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .drop:hover, .drop.over {
+    border-color: var(--mid-blue);
+    background: var(--pale);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(46,117,182,0.12);
+  }
+  .drop .ic {
+    width: 64px; height: 64px; margin: 0 auto 18px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--mid-blue), var(--navy));
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 28px;
+    box-shadow: 0 8px 24px rgba(46,117,182,0.3);
+  }
+  .drop h2 { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+  .drop p { font-size: 13px; color: #5f6b7d; }
+  .drop .hint { font-size: 12px; color: #8a94a3; margin-top: 14px; }
+  input[type=file] { display: none; }
+
+  .meta-row { display: flex; gap: 16px; margin-top: 22px; flex-wrap: wrap; }
+  .meta-field { flex: 1; min-width: 200px; }
+  .meta-field label { font-size: 12px; color: #5f6b7d; font-weight: 600; display: block; margin-bottom: 6px; }
+  .meta-field input {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 9px; font-size: 14px; font-family: var(--sans); color: var(--ink);
+    background: #fff; transition: border 0.15s;
+  }
+  .meta-field input:focus { outline: none; border-color: var(--mid-blue); }
+
+  .status {
+    margin-top: 24px; border-radius: 14px; background: #fff;
+    border: 1px solid var(--line); overflow: hidden;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status-head {
+    padding: 14px 20px; background: var(--pale);
+    border-bottom: 1px solid var(--line);
+    font-size: 13px; font-weight: 600; color: var(--navy);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .status-body { padding: 6px 20px 16px; }
+  .step { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 13px; color: #5f6b7d; }
+  .step .dot {
+    width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+    border: 2px solid var(--line); transition: all 0.2s;
+  }
+  .step.done .dot { background: var(--green); border-color: var(--green); }
+  .step.done { color: var(--ink); }
+  .step.active .dot { border-color: var(--mid-blue); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.4;} }
+
+  .summary-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    margin-top: 24px;
+  }
+  .stat-card {
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .stat-card .v { font-size: 22px; font-weight: 700; color: var(--navy); }
+  .stat-card .l { font-size: 11px; color: #5f6b7d; margin-top: 3px; }
+  .stat-card.prevent .v { color: var(--green); }
+  .stat-card.accept .v { color: var(--amber); }
+
+  .dl-btn {
+    display: none; width: 100%; margin-top: 24px;
+    padding: 16px; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, var(--mid-blue), var(--navy));
+    color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 8px 24px rgba(46,117,182,0.25);
+  }
+  .dl-btn.show { display: block; }
+  .dl-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(46,117,182,0.35); }
+
+  .err {
+    display: none; margin-top: 18px; padding: 14px 18px;
+    background: #FCEBEB; border-left: 4px solid var(--red);
+    border-radius: 9px; font-size: 13px; color: #7a1f1f;
+  }
+  .err.show { display: block; }
+
+  .footnote { margin-top: 32px; font-size: 11px; color: #8a94a3; text-align: center; line-height: 1.7; }
+  .footnote strong { color: #5f6b7d; }
+
+  .tabs { display:flex; gap:6px; margin-bottom:20px; background:#fff; padding:6px; border-radius:12px; border:1px solid var(--line); width:fit-content; }
+  .tab { border:none; background:transparent; padding:9px 20px; border-radius:8px; font-size:13px; font-weight:600; color:#5f6b7d; cursor:pointer; transition:all .15s; font-family:var(--sans); }
+  .tab.active { background:var(--navy); color:#fff; }
+  .pane { display:none; } .pane.active { display:block; }
+  .compare-row { display:flex; gap:16px; flex-wrap:wrap; }
+  .compare-slot { flex:1; min-width:240px; }
+  .slot-label { font-size:12px; font-weight:600; color:#5f6b7d; margin-bottom:8px; }
+  .drop.mini { padding:30px 20px; display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .drop.mini span { font-size:13px; color:#5f6b7d; }
+  .ic-sm { width:38px; height:38px; border-radius:10px; background:linear-gradient(135deg,var(--mid-blue),var(--navy)); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; }
+  .drop.mini.loaded { border-color:var(--green); background:#F0FAF6; }
+  .drop.mini.loaded .ic-sm { background:var(--green); }
+  .dl-btn.secondary { background:linear-gradient(135deg,var(--steel),var(--mid-blue)); }
+  .checklist { display:none; margin-top:24px; background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  .checklist.show { display:block; }
+  .checklist-head { padding:14px 20px; background:var(--pale); border-bottom:1px solid var(--line); font-size:14px; font-weight:600; color:var(--navy); display:flex; align-items:center; justify-content:space-between; }
+  .checklist-copy { font-size:12px; color:var(--mid-blue); cursor:pointer; border:1px solid var(--mid-blue); padding:4px 12px; border-radius:6px; background:#fff; }
+  .checklist-body { padding:8px 20px 18px; }
+  .obs { display:flex; gap:10px; padding:9px 0; font-size:13px; border-bottom:1px solid #f0f2f6; }
+  .obs:last-child { border-bottom:none; }
+  .obs .flag { flex-shrink:0; font-size:11px; font-weight:700; padding:2px 8px; border-radius:5px; height:fit-content; }
+  .obs .flag.watch { background:#FFF2CC; color:#7a5a00; }
+  .obs .flag.info { background:#E2EFFA; color:#1a4d7a; }
+  .obs .flag.action { background:#FCE4EC; color:#8a1f3a; }
+  .obs .txt { color:var(--ink); line-height:1.5; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="shield">IPS</div>
+    <div>
+      <h1>IPS Report Generator</h1>
+      <div class="sub">SCCL / NHS Supply Chain — Network &amp; Security</div>
+    </div>
+  </div>
+  <div class="badge">Runs locally · No data leaves your device</div>
+</div>
+
+<div class="wrap">
+
+  <div class="tabs">
+    <button class="tab active" data-tab="single">Single Report</button>
+    <button class="tab" data-tab="compare">Compare Two Periods</button>
+  </div>
+
+  <!-- SINGLE -->
+  <div class="pane active" id="pane-single">
+    <div class="drop" id="drop">
+      <div class="ic">↑</div>
+      <h2>Drop your IPS log CSV here</h2>
+      <p>or click to browse — accepts the raw Check Point IPS export</p>
+      <div class="hint">Expected columns: Time, Action, Severity, Source, Destination, Protection Name, Resource …</div>
+      <input type="file" id="file" accept=".csv,text/csv">
+    </div>
+    <div class="meta-row">
+      <div class="meta-field">
+        <label>Report period label (optional)</label>
+        <input type="text" id="periodLabel" placeholder="e.g. 27 March – 26 April 2026">
+      </div>
+      <div class="meta-field">
+        <label>Output file name (optional)</label>
+        <input type="text" id="fileName" placeholder="e.g. SCCL_IPS_Apr_2026">
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPARE -->
+  <div class="pane" id="pane-compare">
+    <div class="compare-row">
+      <div class="compare-slot">
+        <div class="slot-label">Benchmark period (earlier)</div>
+        <div class="drop mini" id="dropA"><div class="ic-sm">A</div><span id="nameA">Drop earlier-period CSV</span><input type="file" id="fileA" accept=".csv,text/csv"></div>
+      </div>
+      <div class="compare-slot">
+        <div class="slot-label">Current period (later)</div>
+        <div class="drop mini" id="dropB"><div class="ic-sm">B</div><span id="nameB">Drop later-period CSV</span><input type="file" id="fileB" accept=".csv,text/csv"></div>
+      </div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-field"><label>Benchmark label</label><input type="text" id="labelA" placeholder="e.g. Feb – Mar 2026"></div>
+      <div class="meta-field"><label>Current label</label><input type="text" id="labelB" placeholder="e.g. Mar – Apr 2026"></div>
+    </div>
+    <button class="dl-btn secondary" id="runCompare" style="display:block;">Generate Comparison Report</button>
+  </div>
+
+  <div class="err" id="err"></div>
+
+  <div class="status" id="status">
+    <div class="status-head">
+      <span>Processing log</span>
+      <span id="rowCount"></span>
+    </div>
+    <div class="status-body" id="steps">
+      <div class="step" data-step="parse"><div class="dot"></div>Parsing CSV</div>
+      <div class="step" data-step="validate"><div class="dot"></div>Validating columns</div>
+      <div class="step" data-step="analyse"><div class="dot"></div>Analysing events</div>
+      <div class="step" data-step="categorise"><div class="dot"></div>Categorising signatures</div>
+      <div class="step" data-step="build"><div class="dot"></div>Building Excel workbook</div>
+    </div>
+  </div>
+
+  <div class="summary-grid" id="summary" style="display:none;"></div>
+
+  <button class="dl-btn" id="download">⬇  Download Excel Report</button>
+
+  <div class="checklist" id="checklist">
+    <div class="checklist-head">
+      <span>Observations Checklist — draft notes for your report</span>
+      <button class="checklist-copy" id="copyObs">Copy all</button>
+    </div>
+    <div class="checklist-body" id="obsBody"></div>
+  </div>
+
+  <div class="footnote">
+    <strong>Privacy:</strong> This tool runs entirely in your browser. The CSV you upload is never sent anywhere — all parsing and report generation happens on your own machine.<br>
+    Built for the SCCL / NHS Supply Chain monthly IPS reporting process.
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+//  CATEGORY MAP — maps each IPS signature to a plain-English attack category.
+//  Add new signatures here as they appear in future logs.
+// ─────────────────────────────────────────────────────────────────────────────
+const CATEGORY_MAP = {
+  // Scanning & Reconnaissance
+  "ZMap Security Scanner": "Scanning & Reconnaissance",
+  "Detectify Security Scanner": "Scanning & Reconnaissance",
+  "Nmap Scripting Engine Scanner Over HTTP Request": "Scanning & Reconnaissance",
+  "Masscan Port Scanner": "Scanning & Reconnaissance",
+  "NCSC Security Scanner": "Scanning & Reconnaissance",
+  "Greenbone OpenVAS Security Scanner": "Scanning & Reconnaissance",
+  "HTTP Vulnerability Scanner": "Scanning & Reconnaissance",
+  "Assetnote Security Scanner": "Scanning & Reconnaissance",
+  "watchTowr Security Scanner": "Scanning & Reconnaissance",
+  // Directory Traversal
+  "Apache HTTP Server Directory Traversal": "Directory Traversal",
+  "Web Servers Directory Traversal": "Directory Traversal",
+  "Web Servers Malicious HTTP Header Directory Traversal": "Directory Traversal",
+  "Directory Traversal Obfuscations": "Directory Traversal",
+  "Web Servers Malicious Encoding Directory Traversal": "Directory Traversal",
+  "Web Servers Malicious HTTP Request Directory Traversal": "Directory Traversal",
+  "Yaws Directory Traversal (CVE-2017-10974)": "Directory Traversal",
+  "Citrix Multiple Products Directory Traversal (CVE-2019-19781)": "Directory Traversal",
+  // Configuration File Probing
+  "Sensitive Configuration File Disclosure": "Configuration File Probing",
+  // Source Code Exposure
+  "Web Server Exposed Git Repository Information Disclosure": "Source Code Exposure Probing",
+  // SSL / TLS
+  "OpenSSL TLS DTLS Heartbeat Information Disclosure": "SSL / TLS Exploitation",
+  // Application / Framework
+  "React Server Components Remote Code Execution (CVE-2025-55182)": "Application / Framework Exploitation",
+  "SolarWinds Web Help Desk Authentication Bypass": "Application / Framework Exploitation",
+  "Cisco Smart Licensing Utility Use of Hard-coded Credentials (CVE-2024-20439)": "Application / Framework Exploitation",
+  "Red Hat JBoss Enterprise Application Platform Information Disclosure (CVE-2010-1428)": "Application / Framework Exploitation",
+  "PHPUnit Remote Code Execution (CVE-2017-9841)": "Application / Framework Exploitation",
+  "Kubernetes Authentication Bypass (CVE-2019-11248)": "Application / Framework Exploitation",
+  // Command Injection
+  "Command Injection Over HTTP": "Command Injection",
+  "Command Injection Over HTTP Payload": "Command Injection",
+  "Generic HTTP Command Injection": "Command Injection",
+  "Comtrend Command Injection (CVE-2020-10173)": "Command Injection",
+  "D-Link DSL-2750B Command Injection (CVE-2016-20017)": "Command Injection",
+  "NETGEAR DGN Command Injection": "Command Injection",
+  "TP-Link Archer AX21 Command Injection (CVE-2023-1389)": "Command Injection",
+  // RCE (Other)
+  "Microsoft Windows HTTP.sys Remote Code Execution (MS15-034: CVE-2015-1635)": "Remote Code Execution (Other)",
+  "HTTP Headers Remote Code Execution": "Remote Code Execution (Other)",
+  "Apache Struts2 Remote Code Execution (CVE-2017-5638)": "Remote Code Execution (Other)",
+  "NGINX Ingress Controller Remote Code Execution": "Remote Code Execution (Other)",
+  // Log4Shell
+  "Apache Log4j Remote Code Execution (CVE-2021-44228)": "Log4Shell (CVE-2021-44228)",
+  // CMS
+  "WordPress Sensitive System Files Information Disclosure": "CMS Exploitation (WordPress)",
+  "WordPress REST API Plugin Information Disclosure": "CMS Exploitation (WordPress)",
+  "WordPress LiteSpeed Cache Plugin Information Disclosure (CVE-2024-44000)": "CMS Exploitation (WordPress)",
+  "WordPress Modular DS Plugin Privilege Escalation (CVE-2026-23550)": "CMS Exploitation (WordPress)",
+  // Auth Bypass
+  "DotNetNuke Administration Authentication Bypass": "Authentication Bypass",
+  "SmarterTools SmarterMail Authentication Bypass (CVE-2026-23760)": "Authentication Bypass",
+  // SSH
+  "Multiple SSH Initial Connection Requests": "SSH Exploitation",
+  // Evasion
+  "Null HTTP Encodings": "Malformed / Evasion Traffic",
+};
+
+function categorise(sig) {
+  if (!sig) return "Other";
+  if (CATEGORY_MAP[sig]) return CATEGORY_MAP[sig];
+  // Heuristic fallback for signatures not yet in the map
+  const s = sig.toLowerCase();
+  if (s.includes("scanner") || s.includes("scan")) return "Scanning & Reconnaissance";
+  if (s.includes("directory traversal") || s.includes("traversal")) return "Directory Traversal";
+  if (s.includes("git repository") || s.includes("source code")) return "Source Code Exposure Probing";
+  if (s.includes("configuration file") || s.includes("config")) return "Configuration File Probing";
+  if (s.includes("command injection")) return "Command Injection";
+  if (s.includes("ssl") || s.includes("tls") || s.includes("heartbeat")) return "SSL / TLS Exploitation";
+  if (s.includes("log4j") || s.includes("log4shell")) return "Log4Shell (CVE-2021-44228)";
+  if (s.includes("remote code execution") || s.includes("rce")) return "Remote Code Execution (Other)";
+  if (s.includes("wordpress")) return "CMS Exploitation (WordPress)";
+  if (s.includes("authentication bypass") || s.includes("auth bypass")) return "Authentication Bypass";
+  if (s.includes("router") || s.includes("d-link") || s.includes("tp-link") ||
+      s.includes("netgear") || s.includes("dvr") || s.includes("camera") ||
+      s.includes("zyxel") || s.includes("comtrend")) return "IoT / Network Device Exploitation";
+  if (s.includes("ssh")) return "SSH Exploitation";
+  return "Other";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+let WORKBOOK = null, OUTNAME = "IPS_Report.xlsx";
+
+function setStep(name, state) {
+  document.querySelectorAll('.step').forEach(el => {
+    if (el.dataset.step === name) {
+      el.classList.remove('active', 'done');
+      if (state) el.classList.add(state);
+    }
+  });
+}
+function showErr(msg) {
+  const e = $('err'); e.textContent = "⚠  " + msg; e.classList.add('show');
+}
+function clearErr() { $('err').classList.remove('show'); }
+
+function topN(counter, n) {
+  return Object.entries(counter).sort((a,b)=>b[1]-a[1]).slice(0,n);
+}
+function pct(part, total) { return total ? ((part/total)*100).toFixed(1) + "%" : "0%"; }
+
+// reverse-DNS / org hints for known scanner IPs (extend as needed)
+const KNOWN_IPS = {
+  "52.17.9.21": ["scanner.detectify.com", "Detectify — AWS Ireland", "Commercial vulnerability scanner"],
+  "34.249.80.238": ["check.webcheck.service.ncsc.gov.uk", "NCSC Web Check — AWS Ireland", "UK Government scanning"],
+  "34.251.127.30": ["check1.webcheck.service.ncsc.gov.uk", "NCSC Web Check — AWS Ireland", "UK Government scanning"],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MAIN ANALYSIS
+// ─────────────────────────────────────────────────────────────────────────────
+function analyse(rows) {
+  // strip export-artefact rows
+  rows = rows.filter(r => r.Time && r.Time !== "Failed exporting table." && (r.Source || r.Destination));
+
+  const prevent = rows.filter(r => (r.Action||"").toLowerCase() === "prevent");
+  const accept  = rows.filter(r => (r.Action||"").toLowerCase() === "accept");
+
+  const sevCount = sev => prevent.filter(r => (r.Severity||"")===sev).length;
+
+  // distinct counts
+  const distinct = (arr, key) => new Set(arr.map(r=>r[key]).filter(Boolean)).size;
+
+  // counters
+  const sigCounter = {}, srcCounter = {}, dstCounter = {}, urlCounter = {}, cveCounter = {};
+  prevent.forEach(r => {
+    const sig = r["Protection Name"];
+    if (sig) {
+      sigCounter[sig] = (sigCounter[sig]||0)+1;
+      if (sig.includes("CVE-")) cveCounter[sig] = (cveCounter[sig]||0)+1;
+    }
+    const url = r.Resource;
+    if (url) urlCounter[url] = (urlCounter[url]||0)+1;
+  });
+  rows.forEach(r => {
+    if (r.Source) srcCounter[r.Source] = (srcCounter[r.Source]||0)+1;
+    if (r.Destination) dstCounter[r.Destination] = (dstCounter[r.Destination]||0)+1;
+  });
+
+  // per-source detail
+  function sourceDetail(ip) {
+    const all = rows.filter(r=>r.Source===ip);
+    const p = all.filter(r=>(r.Action||"").toLowerCase()==="prevent");
+    const a = all.filter(r=>(r.Action||"").toLowerCase()==="accept");
+    const crit = p.filter(r=>(r.Severity||"")==="Critical").length;
+    const dests = new Set(all.map(r=>r.Destination).filter(Boolean)).size;
+    const sigC = {}; p.forEach(r=>{ if(r["Protection Name"]) sigC[r["Protection Name"]]=(sigC[r["Protection Name"]]||0)+1; });
+    const topSig = topN(sigC,1)[0]?.[0] || "";
+    const known = KNOWN_IPS[ip];
+    return {
+      ip, host: known?known[0]:"—", org: known?known[1]:"Unregistered",
+      behaviour: known?known[2]:"", total: all.length, prevent: p.length,
+      accept: a.length, crit, dests, topSig
+    };
+  }
+
+  // per-destination detail
+  function destDetail(ep) {
+    const all = rows.filter(r=>r.Destination===ep);
+    const p = all.filter(r=>(r.Action||"").toLowerCase()==="prevent");
+    const a = all.filter(r=>(r.Action||"").toLowerCase()==="accept");
+    const crit = p.filter(r=>(r.Severity||"")==="Critical").length;
+    const srcs = new Set(all.map(r=>r.Source).filter(Boolean)).size;
+    const sigC = {}; p.forEach(r=>{ if(r["Protection Name"]) sigC[r["Protection Name"]]=(sigC[r["Protection Name"]]||0)+1; });
+    const topSig = topN(sigC,1)[0]?.[0] || "";
+    return { ep, total: all.length, prevent: p.length, accept: a.length, crit, srcs, topSig };
+  }
+
+  // categories
+  const catAgg = {};
+  prevent.forEach(r => {
+    const cat = categorise(r["Protection Name"]);
+    if (!catAgg[cat]) catAgg[cat] = { events:0, crit:0, high:0, srcs:new Set(), dests:new Set(), sigs:{} };
+    const c = catAgg[cat];
+    c.events++;
+    if ((r.Severity||"")==="Critical") c.crit++;
+    if ((r.Severity||"")==="High") c.high++;
+    if (r.Source) c.srcs.add(r.Source);
+    if (r.Destination) c.dests.add(r.Destination);
+    const sig = r["Protection Name"];
+    if (sig) c.sigs[sig] = (c.sigs[sig]||0)+1;
+  });
+
+  // daily volume
+  function parseDate(t) {
+    const d = new Date(t);
+    if (isNaN(d)) return null;
+    return d.toISOString().slice(0,10);
+  }
+  const daily = {};
+  rows.forEach(r => {
+    const d = parseDate(r.Time);
+    if (!d) return;
+    if (!daily[d]) daily[d] = { total:0, prevent:0, accept:0, crit:0, high:0 };
+    daily[d].total++;
+    const act = (r.Action||"").toLowerCase();
+    if (act==="prevent") daily[d].prevent++;
+    if (act==="accept") daily[d].accept++;
+    if ((r.Severity||"")==="Critical") daily[d].crit++;
+    if ((r.Severity||"")==="High") daily[d].high++;
+  });
+  const dailyRows = Object.entries(daily).sort((a,b)=>a[0]<b[0]?-1:1);
+  const numDays = dailyRows.length || 1;
+
+  // accept source detail
+  const acceptSrcCounter = {};
+  accept.forEach(r => { if(r.Source) acceptSrcCounter[r.Source]=(acceptSrcCounter[r.Source]||0)+1; });
+
+  return {
+    total: rows.length, prevent: prevent.length, accept: accept.length,
+    crit: sevCount("Critical"), high: sevCount("High"), med: sevCount("Medium"),
+    distinctSrc: distinct(rows,"Source"), distinctDst: distinct(rows,"Destination"),
+    distinctSig: Object.keys(sigCounter).length,
+    sigCounter, srcCounter, dstCounter, urlCounter, cveCounter,
+    sourceDetail, destDetail, catAgg, dailyRows, numDays,
+    acceptSrcCounter,
+    topSig: topN(sigCounter,1)[0] || ["—",0],
+    avgDaily: Math.round(rows.length/numDays),
+    avgPrev: Math.round(prevent.length/numDays),
+    avgAcc: Math.round(accept.length/numDays),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  BUILD WORKBOOK (SheetJS)
+// ─────────────────────────────────────────────────────────────────────────────
+function buildWorkbook(a, periodLabel) {
+  const wb = XLSX.utils.book_new();
+  const aoa = data => XLSX.utils.aoa_to_sheet(data);
+
+  // 1. SUMMARY
+  const summary = [
+    ["IPS Data Summary"],
+    [periodLabel ? periodLabel + "  |  " + a.numDays + " days" : a.numDays + " days  |  IPS Blade: Prevent + Accept Events"],
+    [],
+    ["Metric", "Value"],
+    ["Total events", a.total],
+    ["Prevent (blocked)", a.prevent + " (" + pct(a.prevent,a.total) + ")"],
+    ["Accept (allowed through)", a.accept + " (" + pct(a.accept,a.total) + ")"],
+    ["Signature severity: Critical (Prevent only)", a.crit],
+    ["Signature severity: High (Prevent only)", a.high],
+    ["Signature severity: Medium (Prevent only)", a.med],
+    ["Distinct source IPs", a.distinctSrc],
+    ["Distinct destinations", a.distinctDst],
+    ["Distinct signatures matched (Prevent)", a.distinctSig],
+    ["Average daily events (total)", a.avgDaily],
+    ["Average daily events (Prevent)", a.avgPrev],
+    ["Average daily events (Accept)", a.avgAcc],
+    ["Most frequent signature", a.topSig[0] + " (" + a.topSig[1] + ")"],
+  ];
+  const s1 = aoa(summary); s1['!cols'] = [{wch:42},{wch:46}];
+  XLSX.utils.book_append_sheet(wb, s1, "Summary");
+
+  // 2. ATTACK CATEGORIES
+  const catRows = [["Attack Type","Events","Sig. Critical","Sig. High","Distinct Sources","Distinct Destinations","Most Frequent Signature"]];
+  Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events).forEach(([cat,c])=>{
+    const topSig = topN(c.sigs,1)[0]?.[0] || "";
+    catRows.push([cat, c.events, c.crit, c.high, c.srcs.size, c.dests.size, topSig]);
+  });
+  const s2 = aoa(catRows); s2['!cols']=[{wch:38},{wch:10},{wch:13},{wch:10},{wch:16},{wch:20},{wch:55}];
+  XLSX.utils.book_append_sheet(wb, s2, "Attack Categories");
+
+  // 3. SOURCES
+  const srcRows = [["IP Address","Hostname","Organisation","Observed Behaviour","Total","Prevent","Accept","Sig. Critical","Dest. Hit","Top Signature"]];
+  topN(a.srcCounter,25).forEach(([ip])=>{
+    const d = a.sourceDetail(ip);
+    srcRows.push([d.ip,d.host,d.org,d.behaviour,d.total,d.prevent,d.accept,d.crit,d.dests,d.topSig]);
+  });
+  const s3 = aoa(srcRows); s3['!cols']=[{wch:18},{wch:38},{wch:28},{wch:38},{wch:8},{wch:8},{wch:8},{wch:12},{wch:10},{wch:50}];
+  XLSX.utils.book_append_sheet(wb, s3, "Sources");
+
+  // 4. DESTINATIONS
+  const dstRows = [["Endpoint","Total","Prevent","Accept","Sig. Critical","Distinct Sources","Top Signature"]];
+  topN(a.dstCounter,25).forEach(([ep])=>{
+    const d = a.destDetail(ep);
+    dstRows.push([d.ep,d.total,d.prevent,d.accept,d.crit,d.srcs,d.topSig]);
+  });
+  const s4 = aoa(dstRows); s4['!cols']=[{wch:55},{wch:8},{wch:8},{wch:8},{wch:12},{wch:16},{wch:50}];
+  XLSX.utils.book_append_sheet(wb, s4, "Destinations");
+
+  // 5. CVE SIGNATURES
+  const cveRows = [["CVE Signature","Events"]];
+  topN(a.cveCounter,40).forEach(([sig,ev])=>cveRows.push([sig,ev]));
+  const s5 = aoa(cveRows); s5['!cols']=[{wch:75},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, s5, "CVE Signatures");
+
+  // 6. TARGETED URLS
+  const urlRows = [["URL / Resource Path","Events"]];
+  topN(a.urlCounter,20).forEach(([url,ev])=>urlRows.push([url,ev]));
+  const s6 = aoa(urlRows); s6['!cols']=[{wch:90},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, s6, "Targeted URLs");
+
+  // 7. DAILY VOLUME
+  const dvRows = [["Date","Total","Prevent","Accept","Sig. Critical","Sig. High"]];
+  a.dailyRows.forEach(([d,v])=>dvRows.push([d,v.total,v.prevent,v.accept,v.crit,v.high]));
+  // totals row
+  const tot = a.dailyRows.reduce((acc,[,v])=>{acc.t+=v.total;acc.p+=v.prevent;acc.a+=v.accept;acc.c+=v.crit;acc.h+=v.high;return acc;},{t:0,p:0,a:0,c:0,h:0});
+  dvRows.push(["TOTAL",tot.t,tot.p,tot.a,tot.c,tot.h]);
+  const s7 = aoa(dvRows); s7['!cols']=[{wch:14},{wch:8},{wch:8},{wch:8},{wch:13},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, s7, "Daily Volume");
+
+  // 8. ALL SIGNATURES
+  const allRows = [["Signature Name","Events"]];
+  topN(a.sigCounter, 200).forEach(([sig,ev])=>allRows.push([sig,ev]));
+  const s8 = aoa(allRows); s8['!cols']=[{wch:75},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, s8, "All Signatures");
+
+  // 9. ACCEPT EVENTS
+  const accRows = [["Source IP","Accept Events","% of Total Accept","Prevent Events (same IP)","Accept % of IP traffic"]];
+  topN(a.acceptSrcCounter,15).forEach(([ip,acc])=>{
+    const d = a.sourceDetail(ip);
+    const ipTotal = d.total || 1;
+    accRows.push([ip, acc, pct(acc,a.accept), d.prevent, pct(acc,ipTotal)]);
+  });
+  const s9 = aoa(accRows); s9['!cols']=[{wch:20},{wch:14},{wch:18},{wch:22},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, s9, "Accept Events");
+
+  return wb;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PIPELINE
+// ─────────────────────────────────────────────────────────────────────────────
+function renderSummary(a) {
+  const g = $('summary');
+  g.style.display = 'grid';
+  g.innerHTML = `
+    <div class="stat-card"><div class="v">${a.total.toLocaleString()}</div><div class="l">Total events</div></div>
+    <div class="stat-card prevent"><div class="v">${pct(a.prevent,a.total)}</div><div class="l">Prevention rate</div></div>
+    <div class="stat-card accept"><div class="v">${pct(a.accept,a.total)}</div><div class="l">Accept rate</div></div>
+    <div class="stat-card"><div class="v">${a.avgDaily}</div><div class="l">Avg events / day</div></div>
+  `;
+}
+
+function processFile(file) {
+  clearErr();
+  $('status').classList.add('show');
+  $('summary').style.display = 'none';
+  $('download').classList.remove('show');
+  ['parse','validate','analyse','categorise','build'].forEach(s=>setStep(s,null));
+
+  setStep('parse','active');
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete: results => {
+      try {
+        setStep('parse','done');
+        const rows = results.data;
+        $('rowCount').textContent = rows.length.toLocaleString() + " rows";
+
+        setStep('validate','active');
+        const cols = results.meta.fields || [];
+        const required = ["Time","Action","Source","Destination","Protection Name"];
+        const missing = required.filter(c => !cols.includes(c));
+        if (missing.length) {
+          throw new Error("Missing expected columns: " + missing.join(", ") +
+            ". Make sure you exported the full IPS log including all columns.");
+        }
+        setStep('validate','done');
+
+        setStep('analyse','active');
+        setTimeout(()=>{
+          try {
+            const a = analyse(rows);
+            setStep('analyse','done');
+
+            setStep('categorise','active');
+            setTimeout(()=>{
+              try {
+                setStep('categorise','done');
+                setStep('build','active');
+                setTimeout(()=>{
+                  try {
+                    const period = $('periodLabel').value.trim();
+                    WORKBOOK = buildWorkbook(a, period);
+                    const fn = $('fileName').value.trim();
+                    OUTNAME = (fn || "IPS_Report") + ".xlsx";
+                    setStep('build','done');
+                    renderSummary(a);
+                    LAST_ANALYSIS = a;
+                    renderChecklist(generateObservations(a, null));
+                    $('download').classList.add('show');
+                  } catch(e){ showErr("Build error: "+e.message); }
+                }, 120);
+              } catch(e){ showErr("Categorisation error: "+e.message); }
+            }, 120);
+          } catch(e){ showErr("Analysis error: "+e.message); }
+        }, 120);
+      } catch(e){ showErr(e.message); setStep('validate',null); }
+    },
+    error: err => showErr("CSV parse error: " + err.message)
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  EVENTS
+// ─────────────────────────────────────────────────────────────────────────────
+const drop = $('drop'), fileInput = $('file');
+drop.addEventListener('click', ()=>fileInput.click());
+fileInput.addEventListener('change', e=>{ if(e.target.files[0]) processFile(e.target.files[0]); });
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev, e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop', e=>{ const f=e.dataTransfer.files[0]; if(f) processFile(f); });
+
+$('download').addEventListener('click', ()=>{
+  if (WORKBOOK) XLSX.writeFile(WORKBOOK, OUTNAME);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  OBSERVATIONS CHECKLIST
+// ─────────────────────────────────────────────────────────────────────────────
+let LAST_ANALYSIS = null, PREV_ANALYSIS = null;
+
+function generateObservations(a, prev) {
+  const obs = [];
+  const acceptRate = a.accept / a.total * 100;
+  const preventRate = a.prevent / a.total * 100;
+
+  // Always-on observations from the current period
+  obs.push(["info", `The most frequent signature was ${a.topSig[0]} with ${a.topSig[1].toLocaleString()} events.`]);
+
+  const topCat = Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events)[0];
+  if (topCat) {
+    obs.push(["info", `${topCat[0]} was the largest attack category at ${topCat[1].events.toLocaleString()} events (${(topCat[1].events/a.prevent*100).toFixed(0)}% of Prevent activity).`]);
+  }
+
+  // High accept rate
+  if (acceptRate > 8) {
+    obs.push(["watch", `The Accept rate is ${acceptRate.toFixed(1)}% — a notable share of traffic is being logged but not blocked. Investigate which sources are driving this.`]);
+  }
+
+  // Highest accept source
+  const topAccSrc = topN(a.acceptSrcCounter, 1)[0];
+  if (topAccSrc) {
+    const d = a.sourceDetail(topAccSrc[0]);
+    const ipAccRate = (topAccSrc[1] / (d.total||1) * 100);
+    if (ipAccRate > 50) {
+      obs.push(["action", `${topAccSrc[0]} generated ${topAccSrc[1]} Accept events — ${ipAccRate.toFixed(0)}% of its total traffic passed through IPS uninspected. Consider a perimeter block and investigate why its traffic is not matching signatures.`]);
+    } else {
+      obs.push(["watch", `${topAccSrc[0]} is the largest single source of Accept traffic with ${topAccSrc[1]} events.`]);
+    }
+  }
+
+  // New 2026 / recent CVEs
+  const recentCves = Object.keys(a.cveCounter).filter(s => /CVE-202[5-9]/.test(s));
+  recentCves.forEach(c => {
+    obs.push(["watch", `Recent vulnerability being probed: ${c} — ${a.cveCounter[c]} events. Confirm the relevant systems are patched and the signature is set to Prevent.`]);
+  });
+
+  // Log4Shell persistence
+  const log4 = Object.keys(a.cveCounter).find(s => s.includes("Log4j") || s.includes("44228"));
+  if (log4) {
+    obs.push(["info", `Log4Shell (CVE-2021-44228) is still being attempted — ${a.cveCounter[log4]} events. A reminder that unpatched legacy systems remain a target.`]);
+  }
+
+  // Comparison-driven observations
+  if (prev) {
+    const prevAccRate = prev.accept / prev.total * 100;
+    const prevPrevRate = prev.prevent / prev.total * 100;
+    const dDaily = ((a.avgDaily - prev.avgDaily) / prev.avgDaily * 100);
+    if (Math.abs(dDaily) >= 10) {
+      obs.push(["watch", `Daily average volume ${dDaily>0?'rose':'fell'} ${Math.abs(dDaily).toFixed(0)}% versus the benchmark period (${prev.avgDaily} → ${a.avgDaily} events/day).`]);
+    }
+    if (Math.abs(preventRate - prevPrevRate) >= 2) {
+      obs.push(["action", `Prevention rate ${preventRate<prevPrevRate?'dropped':'rose'} from ${prevPrevRate.toFixed(1)}% to ${preventRate.toFixed(1)}% — a change of more than 2 points warrants investigation.`]);
+    }
+    if (acceptRate - prevAccRate >= 2) {
+      obs.push(["action", `Accept rate increased from ${prevAccRate.toFixed(1)}% to ${acceptRate.toFixed(1)}% — identify the sources driving the increase.`]);
+    }
+    // New sources
+    const prevTopSrc = new Set(topN(prev.srcCounter, 20).map(x=>x[0]));
+    const newSrcs = topN(a.srcCounter, 10).map(x=>x[0]).filter(ip => !prevTopSrc.has(ip));
+    if (newSrcs.length) {
+      obs.push(["watch", `New source IPs in the top 10 not present last period: ${newSrcs.slice(0,5).join(", ")}. Investigate their behaviour.`]);
+    }
+    // New CVEs
+    const prevCves = new Set(Object.keys(prev.cveCounter));
+    const newCves = Object.keys(a.cveCounter).filter(c => !prevCves.has(c));
+    if (newCves.length) {
+      obs.push(["watch", `New CVE signatures this period: ${newCves.slice(0,4).join("; ")}.`]);
+    }
+  } else {
+    // Reminders that need previous-period data
+    obs.push(["info", "Load the previous period in the Compare tab to automatically flag volume shifts, new sources, and new CVEs."]);
+  }
+
+  return obs;
+}
+
+function renderChecklist(obs) {
+  const body = document.getElementById('obsBody');
+  body.innerHTML = obs.map(([flag, txt]) => `
+    <div class="obs">
+      <span class="flag ${flag}">${flag.toUpperCase()}</span>
+      <span class="txt">${txt}</span>
+    </div>`).join('');
+  document.getElementById('checklist').classList.add('show');
+  // store plain text for copy
+  document.getElementById('copyObs').onclick = () => {
+    const text = obs.map(([f,t]) => `[${f.toUpperCase()}] ${t}`).join("\n");
+    navigator.clipboard.writeText(text).then(()=>{
+      const b = document.getElementById('copyObs');
+      const o = b.textContent; b.textContent = "Copied ✓";
+      setTimeout(()=>b.textContent=o, 1500);
+    });
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COMPARISON WORKBOOK — adds a Period Comparison sheet on top of current report
+// ─────────────────────────────────────────────────────────────────────────────
+function buildComparisonSheet(wb, a, b, labelA, labelB) {
+  const accRateA = (a.accept/a.total*100), accRateB = (b.accept/b.total*100);
+  const prevRateA = (a.prevent/a.total*100), prevRateB = (b.prevent/b.total*100);
+  const chg = (x,y) => { const d=((y-x)/x*100); return (d>=0?"+":"")+d.toFixed(0)+"%"; };
+  const pts = (x,y) => { const d=(y-x); return (d>=0?"+":"")+d.toFixed(1)+" pts"; };
+
+  const rows = [
+    ["Period Comparison"],
+    [(labelA||"Benchmark") + "  →  " + (labelB||"Current")],
+    [],
+    ["Metric", labelA||"Benchmark", labelB||"Current", "Daily avg "+(labelA||"A"), "Daily avg "+(labelB||"B"), "Change (daily)"],
+    ["Total events", a.total, b.total, a.avgDaily, b.avgDaily, chg(a.avgDaily,b.avgDaily)],
+    ["Prevent events", a.prevent, b.prevent, a.avgPrev, b.avgPrev, chg(a.avgPrev,b.avgPrev)],
+    ["Accept events", a.accept, b.accept, a.avgAcc, b.avgAcc, chg(a.avgAcc||1,b.avgAcc)],
+    ["Prevention rate", prevRateA.toFixed(1)+"%", prevRateB.toFixed(1)+"%", "", "", pts(prevRateA,prevRateB)],
+    ["Accept rate", accRateA.toFixed(1)+"%", accRateB.toFixed(1)+"%", "", "", pts(accRateA,accRateB)],
+    ["Distinct sources", a.distinctSrc, b.distinctSrc, "", "", chg(a.distinctSrc,b.distinctSrc)],
+    ["Distinct signatures", a.distinctSig, b.distinctSig, "", "", chg(a.distinctSig,b.distinctSig)],
+    [],
+    ["Attack category — daily average comparison"],
+    ["Category", labelA||"Benchmark"+" /day", labelB||"Current"+" /day", "Change"],
+  ];
+  // category daily comparison
+  const cats = new Set([...Object.keys(a.catAgg), ...Object.keys(b.catAgg)]);
+  [...cats].forEach(cat => {
+    const av = (a.catAgg[cat]?.events||0)/a.numDays;
+    const bv = (b.catAgg[cat]?.events||0)/b.numDays;
+    rows.push([cat, av.toFixed(1), bv.toFixed(1), av>0?chg(av,bv):"new"]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:32},{wch:18},{wch:18},{wch:18},{wch:18},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws, "Period Comparison");
+  return wb;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  COMPARE FLOW
+// ─────────────────────────────────────────────────────────────────────────────
+let DATA_A = null, DATA_B = null;
+function loadInto(file, slot) {
+  Papa.parse(file, { header:true, skipEmptyLines:true, complete: res => {
+    const cols = res.meta.fields||[];
+    const required = ["Time","Action","Source","Destination","Protection Name"];
+    if (required.some(c=>!cols.includes(c))) { showErr("File "+slot+" is missing expected columns."); return; }
+    const a = analyse(res.data);
+    if (slot==="A") { DATA_A = a; document.getElementById('dropA').classList.add('loaded'); document.getElementById('nameA').textContent = file.name+" — "+a.total.toLocaleString()+" events"; }
+    else { DATA_B = a; document.getElementById('dropB').classList.add('loaded'); document.getElementById('nameB').textContent = file.name+" — "+a.total.toLocaleString()+" events"; }
+  }});
+}
+
+function runComparison() {
+  clearErr();
+  if (!DATA_A || !DATA_B) { showErr("Load both periods before generating the comparison."); return; }
+  const labelA = document.getElementById('labelA').value.trim();
+  const labelB = document.getElementById('labelB').value.trim();
+  // Build the current-period report, then prepend comparison sheet
+  let wb = buildWorkbook(DATA_B, labelB);
+  wb = buildComparisonSheet(wb, DATA_A, DATA_B, labelA, labelB);
+  // move comparison sheet to front
+  const idx = wb.SheetNames.indexOf("Period Comparison");
+  if (idx > -1) { wb.SheetNames.splice(idx,1); wb.SheetNames.unshift("Period Comparison"); }
+  XLSX.writeFile(wb, (labelB? labelB.replace(/[^a-z0-9]+/gi,"_") : "IPS_Comparison")+".xlsx");
+  // checklist using B vs A
+  renderChecklist(generateObservations(DATA_B, DATA_A));
+  renderSummary(DATA_B);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TAB SWITCHING + COMPARE EVENTS
+// ─────────────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('pane-'+t.dataset.tab).classList.add('active');
+}));
+
+['A','B'].forEach(slot => {
+  const d = document.getElementById('drop'+slot), f = document.getElementById('file'+slot);
+  d.addEventListener('click', ()=>f.click());
+  f.addEventListener('change', e=>{ if(e.target.files[0]) loadInto(e.target.files[0], slot); });
+  ['dragover','dragenter'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove('over');}));
+  d.addEventListener('drop', e=>{ const file=e.dataTransfer.files[0]; if(file) loadInto(file, slot); });
+});
+document.getElementById('runCompare').addEventListener('click', runComparison);
+
+</script>
+</body>
+</html>
