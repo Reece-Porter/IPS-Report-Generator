@@ -299,6 +299,7 @@
       <div class="step" data-step="validate"><div class="dot"></div>Validating columns</div>
       <div class="step" data-step="analyse"><div class="dot"></div>Analysing events</div>
       <div class="step" data-step="categorise"><div class="dot"></div>Categorising signatures</div>
+      <div class="step" data-step="rdns"><div class="dot"></div>Reverse-DNS lookup for top sources</div>
       <div class="step" data-step="build"><div class="dot"></div>Building Excel workbook</div>
     </div>
   </div>
@@ -348,7 +349,8 @@
   </div>
 
   <div class="footnote">
-    <strong>Privacy:</strong> This tool runs entirely in your browser. The CSV you upload is never sent anywhere — all parsing and report generation happens on your own machine.<br>
+    <strong>Privacy:</strong> CSV parsing and report generation happen entirely in your browser — the log file itself is never uploaded.<br>
+    <strong>Reverse DNS:</strong> the top source IPs are sent to Google Public DNS (<code>dns.google</code>) over HTTPS to resolve PTR records. No other data leaves your device.<br>
     Built for the SCCL / NHS Supply Chain monthly IPS reporting process.
   </div>
 
@@ -475,6 +477,65 @@ const KNOWN_IPS = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  REVERSE DNS — uses Google Public DNS-over-HTTPS. Source IPs ARE sent to
+//  Google's resolver (8.8.8.8). Results are cached for the browser session.
+// ─────────────────────────────────────────────────────────────────────────────
+const RDNS_CACHE = {};
+
+function isIPv4(s) { return /^\d{1,3}(\.\d{1,3}){3}$/.test(s); }
+
+function reverseName(ip) {
+  if (isIPv4(ip)) return ip.split('.').reverse().join('.') + '.in-addr.arpa';
+  // IPv6: nibble-reverse + ip6.arpa
+  if (ip.includes(':')) {
+    // Expand zero-groups
+    const parts = ip.split('::');
+    const left = parts[0] ? parts[0].split(':') : [];
+    const right = parts[1] ? parts[1].split(':') : [];
+    const fill = Array(8 - left.length - right.length).fill('0');
+    const groups = [...left, ...fill, ...right].map(g => g.padStart(4,'0'));
+    const nibbles = groups.join('').split('').reverse().join('.');
+    return nibbles + '.ip6.arpa';
+  }
+  return null;
+}
+
+async function rdnsLookup(ip) {
+  if (RDNS_CACHE[ip] !== undefined) return RDNS_CACHE[ip];
+  const qname = reverseName(ip);
+  if (!qname) { RDNS_CACHE[ip] = ""; return ""; }
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3500);
+    const r = await fetch(`https://dns.google/resolve?name=${qname}&type=PTR`, {
+      headers: { 'Accept': 'application/dns-json' },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    const j = await r.json();
+    const ans = (j.Answer || []).find(a => a.type === 12);
+    const host = ans ? ans.data.replace(/\.$/, '') : "";
+    RDNS_CACHE[ip] = host;
+    return host;
+  } catch (_) {
+    RDNS_CACHE[ip] = "";
+    return "";
+  }
+}
+
+// Concurrency-limited batch lookup
+async function rdnsBatch(ips, concurrency = 6) {
+  const queue = ips.slice();
+  const workers = Array(Math.min(concurrency, queue.length)).fill(0).map(async () => {
+    while (queue.length) {
+      const ip = queue.shift();
+      await rdnsLookup(ip);
+    }
+  });
+  await Promise.all(workers);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  MAIN ANALYSIS
 // ─────────────────────────────────────────────────────────────────────────────
 function analyse(rows) {
@@ -515,9 +576,13 @@ function analyse(rows) {
     const sigC = {}; p.forEach(r=>{ if(r["Protection Name"]) sigC[r["Protection Name"]]=(sigC[r["Protection Name"]]||0)+1; });
     const topSig = topN(sigC,1)[0]?.[0] || "";
     const known = KNOWN_IPS[ip];
+    const rdns = RDNS_CACHE[ip];
+    const host = known ? known[0] : (rdns || "—");
+    const org = known ? known[1] : (rdns ? "Resolved via PTR" : "Unregistered");
+    const behaviour = known ? known[2] : "";
     return {
-      ip, host: known?known[0]:"—", org: known?known[1]:"Unregistered",
-      behaviour: known?known[2]:"", total: all.length, prevent: p.length,
+      ip, host, org, behaviour,
+      total: all.length, prevent: p.length,
       accept: a.length, crit, dests, topSig
     };
   }
@@ -921,9 +986,15 @@ function processFile(file) {
             setStep('analyse','done');
 
             setStep('categorise','active');
-            setTimeout(()=>{
+            setTimeout(async ()=>{
               try {
                 setStep('categorise','done');
+                setStep('rdns','active');
+                const topSrcs = topN(a.srcCounter, 25)
+                  .map(([ip])=>ip)
+                  .filter(ip => !KNOWN_IPS[ip] && RDNS_CACHE[ip] === undefined);
+                await rdnsBatch(topSrcs);
+                setStep('rdns','done');
                 setStep('build','active');
                 setTimeout(()=>{
                   try {
@@ -939,7 +1010,7 @@ function processFile(file) {
                     document.getElementById('dashboard').scrollIntoView({behavior:'smooth'});
                   } catch(e){ showErr("Build error: "+e.message); }
                 }, 120);
-              } catch(e){ showErr("Categorisation error: "+e.message); }
+              } catch(e){ showErr("Lookup/build error: "+e.message); }
             }, 120);
           } catch(e){ showErr("Analysis error: "+e.message); }
         }, 120);
@@ -1118,11 +1189,16 @@ function loadInto(file, slot) {
   }});
 }
 
-function runComparison() {
+async function runComparison() {
   clearErr();
   if (!DATA_A || !DATA_B) { showErr("Load both periods before generating the comparison."); return; }
   const labelA = document.getElementById('labelA').value.trim();
   const labelB = document.getElementById('labelB').value.trim();
+  // Reverse-DNS top sources from the current (B) period for the report
+  const topSrcs = topN(DATA_B.srcCounter, 25)
+    .map(([ip])=>ip)
+    .filter(ip => !KNOWN_IPS[ip] && RDNS_CACHE[ip] === undefined);
+  await rdnsBatch(topSrcs);
   // Build the current-period report, then prepend comparison sheet
   let wb = buildWorkbook(DATA_B, labelB);
   wb = buildComparisonSheet(wb, DATA_A, DATA_B, labelA, labelB);
