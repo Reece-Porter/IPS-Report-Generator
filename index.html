@@ -6,6 +6,7 @@
 <title>IPS Report Generator — SCCL / NHS Supply Chain</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
   :root {
     --navy: #1F3864;
@@ -182,6 +183,48 @@
   .obs .flag.info { background:#E2EFFA; color:#1a4d7a; }
   .obs .flag.action { background:#FCE4EC; color:#8a1f3a; }
   .obs .txt { color:var(--ink); line-height:1.5; }
+
+  /* Dashboard */
+  .dashboard { margin-top: 28px; }
+  .dash-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:12px; }
+  .dash-title { font-size:20px; font-weight:700; color:var(--navy); }
+  .dash-actions { display:flex; gap:10px; }
+  .ghost-btn { border:1px solid var(--mid-blue); background:#fff; color:var(--mid-blue); padding:9px 16px; border-radius:9px; font-size:13px; font-weight:600; cursor:pointer; font-family:var(--sans); transition:all .15s; }
+  .ghost-btn:hover { background:var(--pale); }
+  .dl-btn.inline { display:inline-block; width:auto; margin:0; padding:9px 18px; font-size:13px; box-shadow:none; }
+  .dl-btn.inline:hover { transform:none; box-shadow:0 4px 14px rgba(46,117,182,0.3); }
+  .dash-charts { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:8px; }
+  .chart-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .chart-h { font-size:13px; font-weight:600; color:var(--navy); margin-bottom:14px; }
+  .chart-box { position:relative; height:280px; }
+  .dash-tables { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+  .tbl-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; overflow:hidden; }
+  .tbl-card.full { margin-top:16px; }
+  .tbl-h { font-size:13px; font-weight:600; color:var(--navy); margin-bottom:12px; }
+  table.mini { width:100%; border-collapse:collapse; font-size:12px; }
+  table.mini th { text-align:left; color:#5f6b7d; font-weight:600; padding:6px 8px; border-bottom:1.5px solid var(--line); font-size:11px; }
+  table.mini td { padding:6px 8px; border-bottom:1px solid #f0f2f6; color:var(--ink); }
+  table.mini td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  table.mini tr:last-child td { border-bottom:none; }
+  .tag { font-size:10px; padding:1px 6px; border-radius:4px; font-weight:600; }
+  .tag.new { background:#FCE4EC; color:#8a1f3a; }
+  .tag.acc { background:#FFF2CC; color:#7a5a00; }
+  /* comparison block */
+  .cmp-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:4px; margin-bottom:8px; }
+  .cmp-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .cmp-card .metric { font-size:11px; color:#5f6b7d; }
+  .cmp-card .vals { font-size:15px; font-weight:600; color:var(--ink); margin-top:4px; }
+  .cmp-card .delta { font-size:12px; font-weight:600; margin-top:3px; }
+  .delta.up { color:#C0392B; } .delta.down { color:#1D9E75; } .delta.flat { color:#888; }
+  /* print */
+  @media print {
+    body { background:#fff; }
+    .topbar, .tabs, .drop, .meta-row, .pane:not(.active), #err, .footnote, .dash-actions, .checklist-copy { display:none !important; }
+    .wrap { max-width:100%; padding:0; }
+    .dashboard { margin-top:0; }
+    .chart-card, .tbl-card, .stat-card, .cmp-card { break-inside:avoid; box-shadow:none; }
+    .dash-charts { grid-template-columns:1fr 1fr; }
+  }
 </style>
 </head>
 <body>
@@ -260,9 +303,41 @@
     </div>
   </div>
 
-  <div class="summary-grid" id="summary" style="display:none;"></div>
-
-  <button class="dl-btn" id="download">⬇  Download Excel Report</button>
+  <div class="dashboard" id="dashboard" style="display:none;">
+    <div class="dash-toolbar">
+      <h2 class="dash-title" id="dashTitle">Report Summary</h2>
+      <div class="dash-actions">
+        <button class="ghost-btn" id="printBtn">🖨  Print / Save PDF</button>
+        <button class="dl-btn inline" id="download">⬇  Download Excel</button>
+      </div>
+    </div>
+    <div class="summary-grid" id="summary"></div>
+    <div id="compareBlock"></div>
+    <div class="dash-charts">
+      <div class="chart-card">
+        <div class="chart-h">Attack Categories</div>
+        <div class="chart-box"><canvas id="catChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-h">Daily Event Volume</div>
+        <div class="chart-box"><canvas id="dayChart"></canvas></div>
+      </div>
+    </div>
+    <div class="dash-tables">
+      <div class="tbl-card">
+        <div class="tbl-h">Top Sources</div>
+        <div id="srcTable"></div>
+      </div>
+      <div class="tbl-card">
+        <div class="tbl-h">Top Targeted Destinations</div>
+        <div id="dstTable"></div>
+      </div>
+    </div>
+    <div class="tbl-card full">
+      <div class="tbl-h">CVE Signatures Observed</div>
+      <div id="cveTable"></div>
+    </div>
+  </div>
 
   <div class="checklist" id="checklist">
     <div class="checklist-head">
@@ -614,7 +689,15 @@ function buildWorkbook(a, periodLabel) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  PIPELINE
 // ─────────────────────────────────────────────────────────────────────────────
-function renderSummary(a) {
+let CAT_CHART = null, DAY_CHART = null;
+
+function renderSummary(a, prev, labels) {
+  document.getElementById('dashboard').style.display = 'block';
+  // title
+  const t = document.getElementById('dashTitle');
+  t.textContent = (labels && labels.B) ? ("Report Summary — " + labels.B) : "Report Summary";
+
+  // stat cards
   const g = $('summary');
   g.style.display = 'grid';
   g.innerHTML = `
@@ -623,6 +706,86 @@ function renderSummary(a) {
     <div class="stat-card accept"><div class="v">${pct(a.accept,a.total)}</div><div class="l">Accept rate</div></div>
     <div class="stat-card"><div class="v">${a.avgDaily}</div><div class="l">Avg events / day</div></div>
   `;
+
+  // comparison block (only when prev provided)
+  const cb = document.getElementById('compareBlock');
+  if (prev) {
+    const dDaily = ((a.avgDaily - prev.avgDaily) / prev.avgDaily * 100);
+    const pA = prev.prevent/prev.total*100, pB = a.prevent/a.total*100;
+    const aA = prev.accept/prev.total*100, aB = a.accept/a.total*100;
+    const cls = x => x>0.5?'up':(x<-0.5?'down':'flat');
+    const arrow = x => x>0.5?'▲':(x<-0.5?'▼':'▬');
+    cb.innerHTML = `
+      <div class="cmp-grid">
+        <div class="cmp-card"><div class="metric">Daily volume</div>
+          <div class="vals">${prev.avgDaily} → ${a.avgDaily}</div>
+          <div class="delta ${cls(dDaily)}">${arrow(dDaily)} ${Math.abs(dDaily).toFixed(0)}% vs ${labels&&labels.A?labels.A:'benchmark'}</div></div>
+        <div class="cmp-card"><div class="metric">Prevention rate</div>
+          <div class="vals">${pA.toFixed(1)}% → ${pB.toFixed(1)}%</div>
+          <div class="delta ${cls(pB-pA)}">${arrow(pB-pA)} ${Math.abs(pB-pA).toFixed(1)} pts</div></div>
+        <div class="cmp-card"><div class="metric">Accept rate</div>
+          <div class="vals">${aA.toFixed(1)}% → ${aB.toFixed(1)}%</div>
+          <div class="delta ${cls(aB-aA)}">${arrow(aB-aA)} ${Math.abs(aB-aA).toFixed(1)} pts</div></div>
+      </div>`;
+  } else {
+    cb.innerHTML = '';
+  }
+
+  // charts
+  const catData = Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events).slice(0,10);
+  const dark = '#1F3864', steel = '#4472C4';
+  if (CAT_CHART) CAT_CHART.destroy();
+  CAT_CHART = new Chart(document.getElementById('catChart'), {
+    type:'bar',
+    data:{ labels:catData.map(c=>c[0]), datasets:[{ data:catData.map(c=>c[1].events), backgroundColor:steel, borderRadius:4 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}}, scales:{x:{grid:{color:'#eef'}},y:{grid:{display:false},ticks:{font:{size:10}}}} }
+  });
+
+  if (DAY_CHART) DAY_CHART.destroy();
+  DAY_CHART = new Chart(document.getElementById('dayChart'), {
+    type:'line',
+    data:{ labels:a.dailyRows.map(d=>d[0].slice(5)), datasets:[
+      { label:'Total', data:a.dailyRows.map(d=>d[1].total), borderColor:dark, backgroundColor:'rgba(31,56,100,0.08)', fill:true, tension:0.3, pointRadius:2 },
+      { label:'Accept', data:a.dailyRows.map(d=>d[1].accept), borderColor:'#BA7517', backgroundColor:'transparent', tension:0.3, pointRadius:1 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true,labels:{font:{size:11},boxWidth:12}}}, scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:10}},y:{grid:{color:'#eef'}}} }
+  });
+
+  // tables
+  const prevTopSrc = prev ? new Set(topN(prev.srcCounter,20).map(x=>x[0])) : null;
+  let srcHtml = '<table class="mini"><tr><th>Source IP</th><th>Total</th><th>Accept %</th><th></th></tr>';
+  topN(a.srcCounter,8).forEach(([ip,tot])=>{
+    const d = a.sourceDetail(ip);
+    const accPct = d.total ? (d.accept/d.total*100) : 0;
+    const isNew = prevTopSrc && !prevTopSrc.has(ip);
+    const accTag = accPct>50 ? '<span class="tag acc">high accept</span>' : '';
+    const newTag = isNew ? '<span class="tag new">new</span>' : '';
+    srcHtml += `<tr><td>${ip}</td><td class="num">${tot.toLocaleString()}</td><td class="num">${accPct.toFixed(0)}%</td><td>${accTag}${newTag}</td></tr>`;
+  });
+  srcHtml += '</table>';
+  document.getElementById('srcTable').innerHTML = srcHtml;
+
+  let dstHtml = '<table class="mini"><tr><th>Endpoint</th><th>Total</th><th>Sources</th></tr>';
+  topN(a.dstCounter,8).forEach(([ep,tot])=>{
+    const d = a.destDetail(ep);
+    const short = ep.length>34 ? ep.slice(0,34)+'…' : ep;
+    dstHtml += `<tr><td title="${ep}">${short}</td><td class="num">${tot.toLocaleString()}</td><td class="num">${d.srcs}</td></tr>`;
+  });
+  dstHtml += '</table>';
+  document.getElementById('dstTable').innerHTML = dstHtml;
+
+  const prevCves = prev ? new Set(Object.keys(prev.cveCounter)) : null;
+  let cveHtml = '<table class="mini"><tr><th>CVE Signature</th><th>Events</th><th></th></tr>';
+  const cves = topN(a.cveCounter,12);
+  if (cves.length===0) cveHtml += '<tr><td colspan="3" style="color:#888">No CVE-specific signatures matched this period.</td></tr>';
+  cves.forEach(([sig,ev])=>{
+    const isNew = prevCves && !prevCves.has(sig);
+    cveHtml += `<tr><td>${sig}</td><td class="num">${ev}</td><td>${isNew?'<span class="tag new">new</span>':''}</td></tr>`;
+  });
+  cveHtml += '</table>';
+  document.getElementById('cveTable').innerHTML = cveHtml;
 }
 
 function processFile(file) {
@@ -669,10 +832,11 @@ function processFile(file) {
                     const fn = $('fileName').value.trim();
                     OUTNAME = (fn || "IPS_Report") + ".xlsx";
                     setStep('build','done');
-                    renderSummary(a);
                     LAST_ANALYSIS = a;
+                    const lbl = $('periodLabel').value.trim();
+                    renderSummary(a, null, {B:lbl});
                     renderChecklist(generateObservations(a, null));
-                    $('download').classList.add('show');
+                    document.getElementById('dashboard').scrollIntoView({behavior:'smooth'});
                   } catch(e){ showErr("Build error: "+e.message); }
                 }, 120);
               } catch(e){ showErr("Categorisation error: "+e.message); }
@@ -866,8 +1030,10 @@ function runComparison() {
   if (idx > -1) { wb.SheetNames.splice(idx,1); wb.SheetNames.unshift("Period Comparison"); }
   XLSX.writeFile(wb, (labelB? labelB.replace(/[^a-z0-9]+/gi,"_") : "IPS_Comparison")+".xlsx");
   // checklist using B vs A
+  const labels = { A: document.getElementById('labelA').value.trim(), B: document.getElementById('labelB').value.trim() };
+  renderSummary(DATA_B, DATA_A, labels);
   renderChecklist(generateObservations(DATA_B, DATA_A));
-  renderSummary(DATA_B);
+  document.getElementById('dashboard').scrollIntoView({behavior:'smooth'});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -889,6 +1055,7 @@ document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () =>
   d.addEventListener('drop', e=>{ const file=e.dataTransfer.files[0]; if(file) loadInto(file, slot); });
 });
 document.getElementById('runCompare').addEventListener('click', runComparison);
+document.getElementById('printBtn').addEventListener('click', ()=>window.print());
 
 </script>
 </body>
