@@ -216,13 +216,34 @@
   .cmp-card .vals { font-size:15px; font-weight:600; color:var(--ink); margin-top:4px; }
   .cmp-card .delta { font-size:12px; font-weight:600; margin-top:3px; }
   .delta.up { color:#C0392B; } .delta.down { color:#1D9E75; } .delta.flat { color:#888; }
-  /* === CLIENT SELECTOR === */
-  .client-selector { display:flex; gap:8px; margin-bottom:26px; flex-wrap:wrap; }
-  .client-btn { padding:10px 24px; border:2px solid var(--line); border-radius:10px; background:#fff; color:#5f6b7d; font-size:14px; font-weight:600; cursor:pointer; transition:all .15s; font-family:var(--sans); }
-  .client-btn:hover { border-color:var(--mid-blue); color:var(--mid-blue); background:var(--pale); }
-  .client-btn.active { border-color:var(--navy); background:var(--navy); color:#fff; }
+  /* === WELCOME SCREEN === */
+  .welcome-screen { display:flex; flex-direction:column; align-items:center; padding:64px 24px 48px; }
+  .welcome-h { font-size:26px; font-weight:700; color:var(--navy); text-align:center; }
+  .welcome-sub { font-size:14px; color:#5f6b7d; margin-top:8px; text-align:center; }
+  .welcome-cards { display:flex; gap:24px; margin-top:40px; flex-wrap:wrap; justify-content:center; }
+  .welcome-card { width:240px; padding:36px 28px; border:none; border-radius:20px; cursor:pointer; transition:all .22s; display:flex; flex-direction:column; align-items:center; gap:10px; font-family:var(--sans); text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.1); }
+  .welcome-card:hover { transform:translateY(-5px); box-shadow:0 20px 56px rgba(0,0,0,0.18); }
+  .welcome-card.sccl { background:linear-gradient(135deg, var(--mid-blue), var(--navy)); color:#fff; }
+  .welcome-card.tpp  { background:linear-gradient(135deg, #27ae60, #1D9E75); color:#fff; }
+  .wcard-badge { width:52px; height:52px; border-radius:14px; background:rgba(255,255,255,0.2); display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; margin-bottom:4px; }
+  .wcard-name  { font-size:26px; font-weight:700; }
+  .wcard-desc  { font-size:14px; opacity:.85; }
+  .wcard-hint  { font-size:12px; opacity:.65; }
+
+  /* === CLIENT SELECTOR (persistent strip, shown after welcome) === */
+  .client-selector { display:none; gap:8px; margin-bottom:26px; flex-wrap:wrap; align-items:center; }
+  .client-selector.visible { display:flex; }
+  .client-back { font-size:12px; color:#5f6b7d; border:none; background:none; cursor:pointer; padding:0 8px 0 0; font-family:var(--sans); text-decoration:underline; }
+  .client-btn { padding:8px 20px; border:2px solid var(--line); border-radius:10px; background:#fff; color:#5f6b7d; font-size:13px; font-weight:600; cursor:pointer; transition:all .15s; font-family:var(--sans); }
+  .client-btn:hover { background:var(--pale); }
+  .client-btn.sccl-btn.active { border-color:var(--navy); background:var(--navy); color:#fff; }
+  .client-btn.tpp-btn.active  { border-color:#1D9E75; background:#1D9E75; color:#fff; }
   .cpane { display:none; }
   .cpane.active { display:block; }
+
+  /* TPP sub-pane tabs */
+  .tpp-subpane { display:none; }
+  .tpp-subpane.active { display:block; }
 
   /* === TPP STYLES === */
   .ip-section { margin-top:28px; border:1px solid var(--line); border-radius:16px; overflow:hidden; background:#fff; }
@@ -264,10 +285,31 @@
 
 <div class="wrap">
 
-  <!-- Client selector -->
-  <div class="client-selector">
-    <button class="client-btn active" id="btnSccl">SCCL / NHS Supply Chain</button>
-    <button class="client-btn" id="btnTpp">TPP</button>
+  <!-- Welcome / landing screen -->
+  <div id="welcomeScreen" class="welcome-screen">
+    <div class="welcome-h">IPS Report Generator</div>
+    <div class="welcome-sub">Select a client to get started</div>
+    <div class="welcome-cards">
+      <button class="welcome-card sccl" id="welcomeSccl">
+        <div class="wcard-badge">IPS</div>
+        <div class="wcard-name">SCCL</div>
+        <div class="wcard-desc">NHS Supply Chain</div>
+        <div class="wcard-hint">Check Point IPS export</div>
+      </button>
+      <button class="welcome-card tpp" id="welcomeTpp">
+        <div class="wcard-badge">IPS</div>
+        <div class="wcard-name">TPP</div>
+        <div class="wcard-desc">The Pharmacy Partnership</div>
+        <div class="wcard-hint">Fortinet FortiGate IPS export</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Persistent client switcher (shown after selection) -->
+  <div class="client-selector" id="clientSelector">
+    <button class="client-back" id="btnBack">← change client</button>
+    <button class="client-btn sccl-btn" id="btnSccl">SCCL / NHS Supply Chain</button>
+    <button class="client-btn tpp-btn" id="btnTpp">TPP</button>
   </div>
 
   <!-- ═══════════ SCCL PANE ═══════════ -->
@@ -390,49 +432,81 @@
   <!-- ═══════════ TPP PANE ═══════════ -->
   <div id="cpane-tpp" class="cpane">
 
-    <div class="drop" id="tppDrop">
-      <div class="ic">↑</div>
-      <h2>Drop your TPP IPS log CSV here</h2>
-      <p>or click to browse — accepts the Fortinet FortiGate IPS export</p>
-      <div class="hint">Format: Fortinet key=value CSV (no header row) — dropped events only</div>
-      <input type="file" id="tppFile" accept=".csv,text/csv">
+    <div class="tabs">
+      <button class="tab active" data-tpptab="single">Single Report</button>
+      <button class="tab" data-tpptab="compare">Compare Two Periods</button>
     </div>
 
-    <div class="meta-row">
-      <div class="meta-field">
-        <label>Report period label (optional)</label>
-        <input type="text" id="tppPeriodLabel" placeholder="e.g. 28 May – 28 June 2026">
-      </div>
-      <div class="meta-field">
-        <label>Output file name (optional)</label>
-        <input type="text" id="tppFileName" placeholder="e.g. TPP_IPS_Jun_2026">
-      </div>
-    </div>
+    <!-- ── Single Report ── -->
+    <div class="tpp-subpane active" id="tpp-pane-single">
 
-    <div class="meta-row" style="margin-top:10px;">
-      <div class="meta-field">
-        <label>IP 1 label (10.0.120.58 / 185.100.88.237)</label>
-        <input type="text" id="tppIp1Name" value="XX.80.0.201" placeholder="e.g. XX.80.0.201">
+      <div class="drop" id="tppDrop">
+        <div class="ic">↑</div>
+        <h2>Drop your TPP IPS log CSV here</h2>
+        <p>or click to browse — accepts the Fortinet FortiGate IPS export</p>
+        <div class="hint">Format: Fortinet key=value CSV (no header row) — dropped events only</div>
+        <input type="file" id="tppFile" accept=".csv,text/csv">
       </div>
-      <div class="meta-field">
-        <label>IP 2 label (10.0.120.59 / 185.100.88.238)</label>
-        <input type="text" id="tppIp2Name" value="XX.144.0.201" placeholder="e.g. XX.144.0.201">
-      </div>
-    </div>
 
-    <div class="err" id="tppErr"></div>
+      <div class="meta-row">
+        <div class="meta-field">
+          <label>Report period label (optional)</label>
+          <input type="text" id="tppPeriodLabel" placeholder="e.g. 28 May – 28 June 2026">
+        </div>
+        <div class="meta-field">
+          <label>Output file name (optional)</label>
+          <input type="text" id="tppFileName" placeholder="e.g. TPP_IPS_Jun_2026">
+        </div>
+      </div>
 
-    <div class="status" id="tppStatus">
-      <div class="status-head">
-        <span>Processing TPP log</span>
-        <span id="tppRowCount"></span>
+      <div class="err" id="tppErr"></div>
+
+      <div class="status" id="tppStatus">
+        <div class="status-head">
+          <span>Processing TPP log</span>
+          <span id="tppRowCount"></span>
+        </div>
+        <div class="status-body">
+          <div class="step" data-tpp-step="parse"><div class="dot"></div>Parsing Fortinet CSV</div>
+          <div class="step" data-tpp-step="analyse"><div class="dot"></div>Analysing events by destination IP</div>
+          <div class="step" data-tpp-step="build"><div class="dot"></div>Building Excel workbook</div>
+        </div>
       </div>
-      <div class="status-body">
-        <div class="step" data-tpp-step="parse"><div class="dot"></div>Parsing Fortinet CSV</div>
-        <div class="step" data-tpp-step="analyse"><div class="dot"></div>Analysing events by destination IP</div>
-        <div class="step" data-tpp-step="build"><div class="dot"></div>Building Excel workbook</div>
+
+    </div><!-- /tpp-pane-single -->
+
+    <!-- ── Compare Two Periods ── -->
+    <div class="tpp-subpane" id="tpp-pane-compare">
+
+      <div class="compare-row">
+        <div class="compare-slot">
+          <div class="slot-label">Benchmark period (earlier)</div>
+          <div class="drop mini" id="tppDropA">
+            <div class="ic-sm">A</div>
+            <span id="tppNameA">Drop earlier-period CSV</span>
+            <input type="file" id="tppFileA" accept=".csv,text/csv">
+          </div>
+        </div>
+        <div class="compare-slot">
+          <div class="slot-label">Current period (later)</div>
+          <div class="drop mini" id="tppDropB">
+            <div class="ic-sm">B</div>
+            <span id="tppNameB">Drop later-period CSV</span>
+            <input type="file" id="tppFileB" accept=".csv,text/csv">
+          </div>
+        </div>
       </div>
-    </div>
+
+      <div class="meta-row">
+        <div class="meta-field"><label>Benchmark label</label><input type="text" id="tppLabelA" placeholder="e.g. Apr – May 2026"></div>
+        <div class="meta-field"><label>Current label</label><input type="text" id="tppLabelB" placeholder="e.g. May – Jun 2026"></div>
+      </div>
+
+      <button class="dl-btn secondary" id="tppRunCompare" style="display:block;margin-top:18px;">Generate Comparison Report</button>
+
+      <div class="err" id="tppCmpErr"></div>
+
+    </div><!-- /tpp-pane-compare -->
 
     <!-- TPP Results (shown after processing) -->
     <div id="tppResults" style="display:none;">
@@ -1393,16 +1467,36 @@ document.getElementById('runCompare').addEventListener('click', runComparison);
 document.getElementById('printBtn').addEventListener('click', ()=>window.print());
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  CLIENT SWITCHING
+//  CLIENT SELECTION — welcome screen + persistent switcher
 // ─────────────────────────────────────────────────────────────────────────────
-function switchClient(client) {
+function selectClient(client) {
+  document.getElementById('welcomeScreen').style.display = 'none';
+  document.getElementById('clientSelector').classList.add('visible');
   ['sccl','tpp'].forEach(c => {
     document.getElementById('cpane-'+c).classList.toggle('active', c===client);
     document.getElementById('btn'+c.charAt(0).toUpperCase()+c.slice(1)).classList.toggle('active', c===client);
   });
 }
-document.getElementById('btnSccl').addEventListener('click', () => switchClient('sccl'));
-document.getElementById('btnTpp').addEventListener('click', () => switchClient('tpp'));
+function showWelcome() {
+  document.getElementById('welcomeScreen').style.display = '';
+  document.getElementById('clientSelector').classList.remove('visible');
+  ['sccl','tpp'].forEach(c => document.getElementById('cpane-'+c).classList.remove('active'));
+}
+document.getElementById('welcomeSccl').addEventListener('click', () => selectClient('sccl'));
+document.getElementById('welcomeTpp').addEventListener('click',  () => selectClient('tpp'));
+document.getElementById('btnSccl').addEventListener('click', () => selectClient('sccl'));
+document.getElementById('btnTpp').addEventListener('click',  () => selectClient('tpp'));
+document.getElementById('btnBack').addEventListener('click', showWelcome);
+
+// TPP tab switching (Single / Compare)
+document.querySelectorAll('[data-tpptab]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-tpptab]').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tpp-subpane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tpp-pane-'+btn.dataset.tpptab).classList.add('active');
+  });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TPP — CATEGORY MAP
@@ -1715,7 +1809,7 @@ function renderTPPResults(a, ip1label, ip2label) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  TPP — OBSERVATIONS
 // ─────────────────────────────────────────────────────────────────────────────
-function generateTPPObservations(a, ip1label, ip2label) {
+function generateTPPObservations(a, ip1label, ip2label, prev, labelA) {
   const obs = [];
   const all = a.all, ip1 = a.ip1, ip2 = a.ip2;
 
@@ -1750,8 +1844,131 @@ function generateTPPObservations(a, ip1label, ip2label) {
 
   obs.push(["info", `${all.distinctSrc.toLocaleString()} distinct source IPs from ${all.distinctCountries} countries were observed across the period.`]);
 
+  // Comparison-driven observations
+  if (prev) {
+    const dDaily = ((all.avgDaily - prev.all.avgDaily) / (prev.all.avgDaily||1) * 100);
+    if (Math.abs(dDaily) >= 10) {
+      obs.push(["watch", `Daily average volume ${dDaily>0?'rose':'fell'} ${Math.abs(dDaily).toFixed(0)}% versus ${labelA||'the benchmark period'} (${prev.all.avgDaily} → ${all.avgDaily} events/day).`]);
+    }
+    const prevCats = new Set(Object.keys(prev.all.catAgg));
+    const newCats = Object.keys(all.catAgg).filter(c => !prevCats.has(c));
+    if (newCats.length) obs.push(["watch", `New attack categories this period: ${newCats.join(', ')}.`]);
+    const prevCves = new Set(Object.keys(prev.all.cveCounter));
+    const newCves = Object.keys(all.cveCounter).filter(c => !prevCves.has(c));
+    if (newCves.length) obs.push(["watch", `New CVE signatures this period: ${newCves.slice(0,5).join('; ')}.`]);
+    const prevSrcs = new Set(topN(prev.all.srcCounter,20).map(x=>x[0]));
+    const newSrcs = topN(all.srcCounter,10).map(x=>x[0]).filter(ip=>!prevSrcs.has(ip));
+    if (newSrcs.length) obs.push(["watch", `New source IPs in the top 10 not seen last period: ${newSrcs.slice(0,5).join(', ')}.`]);
+  } else {
+    obs.push(["info", "Use the Compare tab to automatically flag volume shifts, new sources, and new CVEs versus a previous period."]);
+  }
+
   return obs;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TPP — COMPARISON WORKBOOK SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+function buildTPPComparisonSheet(wb, a, b, labelA, labelB, ip1label, ip2label) {
+  const chg = (x,y) => { const d=((y-x)/(x||1)*100); return (d>=0?'+':'')+d.toFixed(0)+'%'; };
+  const rows = [
+    ['TPP Period Comparison'],
+    [(labelA||'Benchmark') + '  →  ' + (labelB||'Current')],
+    [],
+    ['Metric', labelA||'Benchmark', labelB||'Current', 'Change'],
+    ['Total events (combined)',   a.all.total,   b.all.total,   chg(a.all.total||1,   b.all.total)],
+    ['Critical severity',         a.all.critical, b.all.critical, chg(a.all.critical||0, b.all.critical)],
+    ['High severity',             a.all.high,    b.all.high,    chg(a.all.high||0,    b.all.high)],
+    ['Distinct source IPs',       a.all.distinctSrc, b.all.distinctSrc, chg(a.all.distinctSrc||1, b.all.distinctSrc)],
+    ['Distinct attack signatures',a.all.distinctSig, b.all.distinctSig, chg(a.all.distinctSig||1, b.all.distinctSig)],
+    ['Avg daily events',          a.all.avgDaily, b.all.avgDaily, chg(a.all.avgDaily||1, b.all.avgDaily)],
+    [],
+    [ip1label + ' (10.0.120.58)'],
+    ['Metric', labelA||'Benchmark', labelB||'Current', 'Change'],
+    ['Total events', a.ip1.total, b.ip1.total, chg(a.ip1.total||1, b.ip1.total)],
+    ['Critical',     a.ip1.critical, b.ip1.critical, chg(a.ip1.critical||0, b.ip1.critical)],
+    ['High',         a.ip1.high, b.ip1.high, chg(a.ip1.high||0, b.ip1.high)],
+    [],
+    [ip2label + ' (10.0.120.59)'],
+    ['Metric', labelA||'Benchmark', labelB||'Current', 'Change'],
+    ['Total events', a.ip2.total, b.ip2.total, chg(a.ip2.total||1, b.ip2.total)],
+    ['Critical',     a.ip2.critical, b.ip2.critical, chg(a.ip2.critical||0, b.ip2.critical)],
+    ['High',         a.ip2.high, b.ip2.high, chg(a.ip2.high||0, b.ip2.high)],
+    [],
+    ['Attack category comparison (daily average)'],
+    ['Category', (labelA||'Benchmark')+' /day', (labelB||'Current')+' /day', 'Change'],
+  ];
+  const cats = new Set([...Object.keys(a.all.catAgg), ...Object.keys(b.all.catAgg)]);
+  [...cats].forEach(cat => {
+    const av = (a.all.catAgg[cat]?.events||0) / a.all.numDays;
+    const bv = (b.all.catAgg[cat]?.events||0) / b.all.numDays;
+    rows.push([cat, av.toFixed(1), bv.toFixed(1), av>0 ? chg(av,bv) : 'new']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:36},{wch:18},{wch:18},{wch:14}];
+  styleSheet(ws, rows, { headerRow:3, dataStart:4, mergeHeader:true, numericCols:[1,2] });
+  XLSX.utils.book_append_sheet(wb, ws, 'Period Comparison');
+  return wb;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TPP — COMPARE FLOW
+// ─────────────────────────────────────────────────────────────────────────────
+let TPP_DATA_A = null, TPP_DATA_B = null;
+
+function loadTPPInto(file, slot) {
+  const errEl = document.getElementById('tppCmpErr');
+  errEl.classList.remove('show');
+  Papa.parse(file, {
+    header: false, skipEmptyLines: true,
+    complete: res => {
+      const rows = res.data.map(parseFortinetRow).filter(r => r.dstip);
+      if (!rows.length) { errEl.textContent='⚠  File '+slot+' has no valid Fortinet rows.'; errEl.classList.add('show'); return; }
+      const a = analyseTPP(rows);
+      if (slot === 'A') {
+        TPP_DATA_A = a;
+        document.getElementById('tppDropA').classList.add('loaded');
+        document.getElementById('tppNameA').textContent = file.name + ' — ' + a.all.total.toLocaleString() + ' events';
+      } else {
+        TPP_DATA_B = a;
+        document.getElementById('tppDropB').classList.add('loaded');
+        document.getElementById('tppNameB').textContent = file.name + ' — ' + a.all.total.toLocaleString() + ' events';
+      }
+    }
+  });
+}
+
+function runTPPComparison() {
+  const errEl = document.getElementById('tppCmpErr');
+  errEl.classList.remove('show');
+  if (!TPP_DATA_A || !TPP_DATA_B) { errEl.textContent='⚠  Load both periods before generating.'; errEl.classList.add('show'); return; }
+  const labelA   = document.getElementById('tppLabelA').value.trim();
+  const labelB   = document.getElementById('tppLabelB').value.trim();
+  const ip1label = 'XX.80.0.201';
+  const ip2label = 'XX.144.0.201';
+  let wb = buildTPPWorkbook(TPP_DATA_B, ip1label, ip2label, labelB);
+  wb = buildTPPComparisonSheet(wb, TPP_DATA_A, TPP_DATA_B, labelA, labelB, ip1label, ip2label);
+  const idx = wb.SheetNames.indexOf('Period Comparison');
+  if (idx > 0) { wb.SheetNames.splice(idx,1); wb.SheetNames.unshift('Period Comparison'); }
+  XLSX.writeFile(wb, (labelB ? labelB.replace(/[^a-z0-9]+/gi,'_') : 'TPP_Comparison')+'.xlsx');
+  // Show results in the results panel
+  document.getElementById('tppResults').style.display = 'none';
+  renderTPPResults(TPP_DATA_B, ip1label, ip2label);
+  renderTPPChecklist(generateTPPObservations(TPP_DATA_B, ip1label, ip2label, TPP_DATA_A, labelA));
+  document.getElementById('tppResults').scrollIntoView({ behavior:'smooth' });
+}
+
+// TPP compare drop zone events
+['A','B'].forEach(slot => {
+  const d = document.getElementById('tppDrop'+slot);
+  const f = document.getElementById('tppFile'+slot);
+  d.addEventListener('click', ()=>f.click());
+  f.addEventListener('change', e=>{ if(e.target.files[0]) loadTPPInto(e.target.files[0], slot); });
+  ['dragover','dragenter'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>d.addEventListener(ev,e=>{e.preventDefault();d.classList.remove('over');}));
+  d.addEventListener('drop', e=>{ const file=e.dataTransfer.files[0]; if(file) loadTPPInto(file, slot); });
+});
+document.getElementById('tppRunCompare').addEventListener('click', runTPPComparison);
 
 function renderTPPChecklist(obs) {
   const body = document.getElementById('tppObsBody');
@@ -1822,8 +2039,8 @@ function processTPPFile(file) {
             setTPPStep('build','active');
             setTimeout(() => {
               try {
-                const ip1label = document.getElementById('tppIp1Name').value.trim() || 'XX.80.0.201';
-                const ip2label = document.getElementById('tppIp2Name').value.trim() || 'XX.144.0.201';
+                const ip1label = 'XX.80.0.201';
+                const ip2label = 'XX.144.0.201';
                 const period = document.getElementById('tppPeriodLabel').value.trim();
                 TPP_WORKBOOK = buildTPPWorkbook(a, ip1label, ip2label, period);
                 const fn = document.getElementById('tppFileName').value.trim();
