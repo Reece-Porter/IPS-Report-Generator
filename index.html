@@ -455,6 +455,10 @@
       </div>
     </div>
     <div class="tbl-card full">
+      <div class="tbl-h">Top Attack Signatures</div>
+      <div id="sigTable"></div>
+    </div>
+    <div class="tbl-card full">
       <div class="tbl-h">CVE Signatures Observed</div>
       <div id="cveTable"></div>
     </div>
@@ -832,7 +836,7 @@ function analyse(rows) {
   const distinct = (arr, key) => new Set(arr.map(r=>r[key]).filter(Boolean)).size;
 
   // counters
-  const sigCounter = {}, srcCounter = {}, dstCounter = {}, urlCounter = {}, cveCounter = {};
+  const sigCounter = {}, acceptSigCounter = {}, srcCounter = {}, dstCounter = {}, urlCounter = {}, cveCounter = {}, acceptCveCounter = {};
   prevent.forEach(r => {
     const sig = r["Protection Name"];
     if (sig) {
@@ -841,6 +845,13 @@ function analyse(rows) {
     }
     const url = r.Resource;
     if (url) urlCounter[url] = (urlCounter[url]||0)+1;
+  });
+  accept.forEach(r => {
+    const sig = r["Protection Name"];
+    if (sig) {
+      acceptSigCounter[sig] = (acceptSigCounter[sig]||0)+1;
+      if (sig.includes("CVE-")) acceptCveCounter[sig] = (acceptCveCounter[sig]||0)+1;
+    }
   });
   rows.forEach(r => {
     if (r.Source) srcCounter[r.Source] = (srcCounter[r.Source]||0)+1;
@@ -925,7 +936,7 @@ function analyse(rows) {
     crit: sevCount("Critical"), high: sevCount("High"), med: sevCount("Medium"),
     distinctSrc: distinct(rows,"Source"), distinctDst: distinct(rows,"Destination"),
     distinctSig: Object.keys(sigCounter).length,
-    sigCounter, srcCounter, dstCounter, urlCounter, cveCounter,
+    sigCounter, acceptSigCounter, srcCounter, dstCounter, urlCounter, cveCounter, acceptCveCounter,
     sourceDetail, destDetail, catAgg, dailyRows, numDays,
     acceptSrcCounter,
     topSig: topN(sigCounter,1)[0] || ["—",0],
@@ -1225,34 +1236,53 @@ function renderSummary(a, prev, labels) {
 
   // tables
   const prevTopSrc = prev ? new Set(topN(prev.srcCounter,20).map(x=>x[0])) : null;
-  let srcHtml = '<table class="mini"><tr><th>Source IP</th><th>Total</th><th>Accept %</th><th></th></tr>';
+  let srcHtml = '<table class="mini"><tr><th>Source IP</th><th>Prevented</th><th>Accepted</th><th>Total</th><th></th></tr>';
   topN(a.srcCounter,8).forEach(([ip,tot])=>{
     const d = a.sourceDetail(ip);
     const accPct = d.total ? (d.accept/d.total*100) : 0;
     const isNew = prevTopSrc && !prevTopSrc.has(ip);
     const accTag = accPct>50 ? '<span class="tag acc">high accept</span>' : '';
     const newTag = isNew ? '<span class="tag new">new</span>' : '';
-    srcHtml += `<tr><td>${ip}</td><td class="num">${tot.toLocaleString()}</td><td class="num">${accPct.toFixed(0)}%</td><td>${accTag}${newTag}</td></tr>`;
+    srcHtml += `<tr><td>${ip}</td><td class="num">${d.prevent.toLocaleString()}</td><td class="num">${d.accept.toLocaleString()}</td><td class="num">${tot.toLocaleString()}</td><td>${accTag}${newTag}</td></tr>`;
   });
   srcHtml += '</table>';
   document.getElementById('srcTable').innerHTML = srcHtml;
 
-  let dstHtml = '<table class="mini"><tr><th>Endpoint</th><th>Total</th><th>Sources</th></tr>';
+  let dstHtml = '<table class="mini"><tr><th>Endpoint</th><th>Prevented</th><th>Accepted</th><th>Total</th><th>Sources</th></tr>';
   topN(a.dstCounter,8).forEach(([ep,tot])=>{
     const d = a.destDetail(ep);
-    const short = ep.length>34 ? ep.slice(0,34)+'…' : ep;
-    dstHtml += `<tr><td title="${ep}">${short}</td><td class="num">${tot.toLocaleString()}</td><td class="num">${d.srcs}</td></tr>`;
+    const short = ep.length>30 ? ep.slice(0,30)+'…' : ep;
+    dstHtml += `<tr><td title="${ep}">${short}</td><td class="num">${d.prevent.toLocaleString()}</td><td class="num">${d.accept.toLocaleString()}</td><td class="num">${tot.toLocaleString()}</td><td class="num">${d.srcs}</td></tr>`;
   });
   dstHtml += '</table>';
   document.getElementById('dstTable').innerHTML = dstHtml;
 
+  // all signatures with prevent/accept split
+  const prevSigKeys = prev ? new Set(Object.keys(prev.sigCounter)) : null;
+  const allSigKeys = new Set([...Object.keys(a.sigCounter), ...Object.keys(a.acceptSigCounter)]);
+  const combinedSigs = Array.from(allSigKeys).map(s=>([s, (a.sigCounter[s]||0)+(a.acceptSigCounter[s]||0)])).sort((x,y)=>y[1]-x[1]).slice(0,15);
+  let sigHtml = '<table class="mini"><tr><th>Signature</th><th>Prevented</th><th>Accepted</th><th>Total</th><th></th></tr>';
+  if (combinedSigs.length===0) sigHtml += '<tr><td colspan="5" style="color:#888">No signatures found.</td></tr>';
+  combinedSigs.forEach(([sig, tot])=>{
+    const prev_ = a.sigCounter[sig]||0;
+    const acc_  = a.acceptSigCounter[sig]||0;
+    const isNew = prevSigKeys && !prevSigKeys.has(sig);
+    const short = sig.length>52 ? sig.slice(0,52)+'…' : sig;
+    sigHtml += `<tr><td title="${sig}">${short}</td><td class="num">${prev_.toLocaleString()}</td><td class="num">${acc_.toLocaleString()}</td><td class="num">${tot.toLocaleString()}</td><td>${isNew?'<span class="tag new">new</span>':''}</td></tr>`;
+  });
+  sigHtml += '</table>';
+  document.getElementById('sigTable').innerHTML = sigHtml;
+
   const prevCves = prev ? new Set(Object.keys(prev.cveCounter)) : null;
-  let cveHtml = '<table class="mini"><tr><th>CVE Signature</th><th>Events</th><th></th></tr>';
-  const cves = topN(a.cveCounter,12);
-  if (cves.length===0) cveHtml += '<tr><td colspan="3" style="color:#888">No CVE-specific signatures matched this period.</td></tr>';
-  cves.forEach(([sig,ev])=>{
+  const allCveKeys = new Set([...Object.keys(a.cveCounter), ...Object.keys(a.acceptCveCounter)]);
+  const combinedCves = Array.from(allCveKeys).map(s=>([s,(a.cveCounter[s]||0)+(a.acceptCveCounter[s]||0)])).sort((x,y)=>y[1]-x[1]).slice(0,12);
+  let cveHtml = '<table class="mini"><tr><th>CVE Signature</th><th>Prevented</th><th>Accepted</th><th>Total</th><th></th></tr>';
+  if (combinedCves.length===0) cveHtml += '<tr><td colspan="5" style="color:#888">No CVE-specific signatures matched this period.</td></tr>';
+  combinedCves.forEach(([sig])=>{
+    const prev_ = a.cveCounter[sig]||0;
+    const acc_  = a.acceptCveCounter[sig]||0;
     const isNew = prevCves && !prevCves.has(sig);
-    cveHtml += `<tr><td>${sig}</td><td class="num">${ev}</td><td>${isNew?'<span class="tag new">new</span>':''}</td></tr>`;
+    cveHtml += `<tr><td>${sig}</td><td class="num">${prev_.toLocaleString()}</td><td class="num">${acc_.toLocaleString()}</td><td class="num">${(prev_+acc_).toLocaleString()}</td><td>${isNew?'<span class="tag new">new</span>':''}</td></tr>`;
   });
   cveHtml += '</table>';
   document.getElementById('cveTable').innerHTML = cveHtml;
