@@ -518,55 +518,34 @@
         </div>
       </div>
 
-      <div class="tpp-combined-head">Combined — both IPs</div>
       <div class="summary-grid" id="tppSummaryGrid"></div>
+      <div id="tppCompareBlock"></div>
 
-      <!-- IP 1 -->
-      <div class="ip-section" id="tppIp1Section">
-        <div class="ip-section-head">
-          <div class="ip-section-badge">1</div>
-          <div>
-            <div class="ip-section-title" id="tppIp1Title">XX.80.0.201</div>
-            <div class="ip-section-sub">Internal: 10.0.120.58 · Hostname: 185.100.88.237</div>
-          </div>
+      <div class="dash-charts">
+        <div class="chart-card">
+          <div class="chart-h">Attack Categories</div>
+          <div class="chart-box"><canvas id="tppCatChart"></canvas></div>
         </div>
-        <div class="tpp-inner">
-          <div class="summary-grid" id="tppIp1Grid" style="margin-bottom:18px;"></div>
-          <div class="tpp-preview-tabs" id="tppTabs1">
-            <button class="tpp-ptab active" data-ip="1" data-ptab="cat">Attack Categories</button>
-            <button class="tpp-ptab" data-ip="1" data-ptab="src">Top Sources</button>
-            <button class="tpp-ptab" data-ip="1" data-ptab="sig">Top Signatures</button>
-            <button class="tpp-ptab" data-ip="1" data-ptab="day">Daily Volume</button>
-          </div>
-          <div class="tpp-pane active" id="tpp1-cat"></div>
-          <div class="tpp-pane" id="tpp1-src"></div>
-          <div class="tpp-pane" id="tpp1-sig"></div>
-          <div class="tpp-pane" id="tpp1-day"></div>
+        <div class="chart-card">
+          <div class="chart-h">Daily Event Volume</div>
+          <div class="chart-box"><canvas id="tppDayChart"></canvas></div>
         </div>
       </div>
 
-      <!-- IP 2 -->
-      <div class="ip-section" id="tppIp2Section">
-        <div class="ip-section-head">
-          <div class="ip-section-badge">2</div>
-          <div>
-            <div class="ip-section-title" id="tppIp2Title">XX.144.0.201</div>
-            <div class="ip-section-sub">Internal: 10.0.120.59 · Hostname: 185.100.88.238</div>
-          </div>
+      <div class="dash-tables">
+        <div class="tbl-card">
+          <div class="tbl-h">Top Sources</div>
+          <div id="tppSrcTable"></div>
         </div>
-        <div class="tpp-inner">
-          <div class="summary-grid" id="tppIp2Grid" style="margin-bottom:18px;"></div>
-          <div class="tpp-preview-tabs" id="tppTabs2">
-            <button class="tpp-ptab active" data-ip="2" data-ptab="cat">Attack Categories</button>
-            <button class="tpp-ptab" data-ip="2" data-ptab="src">Top Sources</button>
-            <button class="tpp-ptab" data-ip="2" data-ptab="sig">Top Signatures</button>
-            <button class="tpp-ptab" data-ip="2" data-ptab="day">Daily Volume</button>
-          </div>
-          <div class="tpp-pane active" id="tpp2-cat"></div>
-          <div class="tpp-pane" id="tpp2-src"></div>
-          <div class="tpp-pane" id="tpp2-sig"></div>
-          <div class="tpp-pane" id="tpp2-day"></div>
+        <div class="tbl-card">
+          <div class="tbl-h">Top Attack Signatures</div>
+          <div id="tppSigTable"></div>
         </div>
+      </div>
+
+      <div class="tbl-card full">
+        <div class="tbl-h">CVE Signatures Observed</div>
+        <div id="tppCveTable"></div>
       </div>
 
     </div><!-- /tppResults -->
@@ -580,8 +559,7 @@
     </div>
 
     <div class="footnote" style="margin-top:32px;">
-      <strong>TPP / Fortinet FortiGate</strong> — key=value CSV format, no header row.<br>
-      Parsed entirely in-browser. Excel report includes per-IP breakdowns, CVEs, and targeted URLs.
+      <strong>TPP / Fortinet FortiGate</strong> — key=value CSV format, no header row. Parsed entirely in-browser.
     </div>
 
   </div><!-- /cpane-tpp -->
@@ -1606,20 +1584,10 @@ function analyseTPPIP(rows) {
   };
 }
 
-function analyseTPP(rows) {
-  const ip1rows = rows.filter(r => r.dstip === '10.0.120.58');
-  const ip2rows = rows.filter(r => r.dstip === '10.0.120.59');
-  return {
-    all: analyseTPPIP(rows),
-    ip1: analyseTPPIP(ip1rows),
-    ip2: analyseTPPIP(ip2rows),
-  };
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 //  TPP — EXCEL WORKBOOK BUILDER
 // ─────────────────────────────────────────────────────────────────────────────
-function buildTPPWorkbook(a, ip1label, ip2label, periodLabel) {
+function buildTPPWorkbook(a, periodLabel) {
   const wb = XLSX.utils.book_new();
   const aoa = d => XLSX.utils.aoa_to_sheet(d);
   const per = periodLabel ? periodLabel + '  |  ' : '';
@@ -1629,238 +1597,213 @@ function buildTPPWorkbook(a, ip1label, ip2label, periodLabel) {
     ['TPP IPS Report Summary'],
     [per + 'Fortinet FortiGate — Dropped events only'],
     [],
-    ['Metric', 'Combined', ip1label + ' (10.0.120.58)', ip2label + ' (10.0.120.59)'],
-    ['Total events', a.all.total, a.ip1.total, a.ip2.total],
-    ['Critical severity', a.all.critical, a.ip1.critical, a.ip2.critical],
-    ['High severity', a.all.high, a.ip1.high, a.ip2.high],
-    ['Low severity', a.all.low, a.ip1.low, a.ip2.low],
-    ['Distinct source IPs', a.all.distinctSrc, a.ip1.distinctSrc, a.ip2.distinctSrc],
-    ['Distinct attack signatures', a.all.distinctSig, a.ip1.distinctSig, a.ip2.distinctSig],
-    ['Source countries', a.all.distinctCountries, a.ip1.distinctCountries, a.ip2.distinctCountries],
-    ['Avg daily events', a.all.avgDaily, a.ip1.avgDaily, a.ip2.avgDaily],
-    ['Top attack signature', a.all.topAttack[0], a.ip1.topAttack[0], a.ip2.topAttack[0]],
-    ['Top source country', a.all.topCountry[0], a.ip1.topCountry[0], a.ip2.topCountry[0]],
+    ['Metric', 'Value'],
+    ['Total events', a.total],
+    ['Severity: Critical', a.critical],
+    ['Severity: High', a.high],
+    ['Severity: Low', a.low],
+    ['Distinct source IPs', a.distinctSrc],
+    ['Distinct attack signatures', a.distinctSig],
+    ['Source countries', a.distinctCountries],
+    ['Avg daily events', a.avgDaily],
+    ['Analysis period (days)', a.numDays],
+    ['Top attack signature', a.topAttack[0] + ' (' + a.topAttack[1] + ')'],
+    ['Top source country', a.topCountry[0]],
   ];
-  const sSum = aoa(sumRows); sSum['!cols'] = [{wch:34},{wch:16},{wch:22},{wch:22}];
+  const sSum = aoa(sumRows); sSum['!cols'] = [{wch:34},{wch:46}];
   styleSheet(sSum, sumRows, { headerRow:3, dataStart:4, mergeHeader:true });
   XLSX.utils.book_append_sheet(wb, sSum, 'Summary');
 
-  // Helper: build per-IP sheets
-  function addIPSheets(ipData, label, internalIp, hostname) {
-    const hdr = [label + ' — ' + internalIp];
-    const sub = [per + 'Hostname: ' + hostname];
+  // 2. ATTACK CATEGORIES
+  const catRows = [['Attack Category','Events','% of Total','Distinct Sources','Top Signature']];
+  Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events).forEach(([cat,c]) => {
+    catRows.push([cat, c.events, pct(c.events,a.total), c.srcs.size, topN(c.sigs,1)[0]?.[0]||'—']);
+  });
+  const sCat = aoa(catRows); sCat['!cols'] = [{wch:36},{wch:10},{wch:12},{wch:16},{wch:55}];
+  styleSheet(sCat, catRows, { numericCols:[1,3] });
+  XLSX.utils.book_append_sheet(wb, sCat, 'Attack Categories');
 
-    // Categories sheet
-    const catRows = [hdr, sub, [],
-      ['Attack Category','Events','% of Total','Distinct Sources','Top Signature']];
-    Object.entries(ipData.catAgg).sort((x,y)=>y[1].events-x[1].events).forEach(([cat,c]) => {
-      const topSig = topN(c.sigs,1)[0]?.[0] || '—';
-      catRows.push([cat, c.events, pct(c.events,ipData.total), c.srcs.size, topSig]);
-    });
-    const sCat = aoa(catRows); sCat['!cols'] = [{wch:36},{wch:10},{wch:12},{wch:16},{wch:55}];
-    styleSheet(sCat, catRows, { headerRow:3, dataStart:4, mergeHeader:true, numericCols:[1,3] });
-    XLSX.utils.book_append_sheet(wb, sCat, label.replace(/[^a-zA-Z0-9 .]/g,'') + ' – Categories');
+  // 3. TOP SOURCES
+  const srcRows = [['Source IP','Country','Events','% of Total']];
+  topN(a.srcCounter,25).forEach(([ip,count]) => {
+    srcRows.push([ip, a.srcCountryMap[ip]||'—', count, pct(count,a.total)]);
+  });
+  const sSrc = aoa(srcRows); sSrc['!cols'] = [{wch:20},{wch:22},{wch:10},{wch:12}];
+  styleSheet(sSrc, srcRows, { numericCols:[2] });
+  XLSX.utils.book_append_sheet(wb, sSrc, 'Top Sources');
 
-    // Top Sources sheet
-    const srcRows = [hdr, sub, [],
-      ['Source IP','Country','Events','% of Total']];
-    topN(ipData.srcCounter,25).forEach(([ip,count]) => {
-      srcRows.push([ip, ipData.srcCountryMap[ip]||'—', count, pct(count,ipData.total)]);
-    });
-    const sSrc = aoa(srcRows); sSrc['!cols'] = [{wch:20},{wch:22},{wch:10},{wch:12}];
-    styleSheet(sSrc, srcRows, { headerRow:3, dataStart:4, mergeHeader:true, numericCols:[2] });
-    XLSX.utils.book_append_sheet(wb, sSrc, label.replace(/[^a-zA-Z0-9 .]/g,'') + ' – Sources');
+  // 4. DAILY VOLUME
+  const dvRows = [['Date','Total','Critical','High','Low']];
+  a.dailyRows.forEach(([d,v]) => dvRows.push([d, v.total, v.critical, v.high, v.low]));
+  const dvTot = a.dailyRows.reduce((acc,[,v])=>({t:acc.t+v.total,c:acc.c+v.critical,h:acc.h+v.high,l:acc.l+v.low}),{t:0,c:0,h:0,l:0});
+  dvRows.push(['TOTAL', dvTot.t, dvTot.c, dvTot.h, dvTot.l]);
+  const sDv = aoa(dvRows); sDv['!cols'] = [{wch:14},{wch:8},{wch:10},{wch:8},{wch:8}];
+  styleSheet(sDv, dvRows, { numericCols:[1], severityCols:{crit:2,high:3}, totalsRow:dvRows.length-1 });
+  XLSX.utils.book_append_sheet(wb, sDv, 'Daily Volume');
 
-    // Daily Volume sheet
-    const dvRows = [hdr, sub, [],
-      ['Date','Total','Critical','High','Low']];
-    ipData.dailyRows.forEach(([d,v]) => dvRows.push([d, v.total, v.critical, v.high, v.low]));
-    const tot = ipData.dailyRows.reduce((acc,[,v])=>({t:acc.t+v.total,c:acc.c+v.critical,h:acc.h+v.high,l:acc.l+v.low}),{t:0,c:0,h:0,l:0});
-    dvRows.push(['TOTAL', tot.t, tot.c, tot.h, tot.l]);
-    const sDv = aoa(dvRows); sDv['!cols'] = [{wch:14},{wch:8},{wch:10},{wch:8},{wch:8}];
-    styleSheet(sDv, dvRows, { headerRow:3, dataStart:4, mergeHeader:true, numericCols:[1], severityCols:{crit:2,high:3}, totalsRow:dvRows.length-1 });
-    XLSX.utils.book_append_sheet(wb, sDv, label.replace(/[^a-zA-Z0-9 .]/g,'') + ' – Daily');
+  // 5. ALL SIGNATURES
+  const sigRows = [['Attack Signature','Events']];
+  topN(a.attackCounter,200).forEach(([sig,count]) => sigRows.push([sig,count]));
+  const sSig = aoa(sigRows); sSig['!cols'] = [{wch:60},{wch:10}];
+  styleSheet(sSig, sigRows, { numericCols:[1] });
+  XLSX.utils.book_append_sheet(wb, sSig, 'All Signatures');
 
-    // All Signatures sheet
-    const sigRows = [hdr, sub, [],
-      ['Attack Signature','Events']];
-    topN(ipData.attackCounter,200).forEach(([sig,count]) => sigRows.push([sig,count]));
-    const sSig = aoa(sigRows); sSig['!cols'] = [{wch:60},{wch:10}];
-    styleSheet(sSig, sigRows, { headerRow:3, dataStart:4, mergeHeader:true, numericCols:[1] });
-    XLSX.utils.book_append_sheet(wb, sSig, label.replace(/[^a-zA-Z0-9 .]/g,'') + ' – Signatures');
-  }
-
-  addIPSheets(a.ip1, ip1label, '10.0.120.58', '185.100.88.237');
-  addIPSheets(a.ip2, ip2label, '10.0.120.59', '185.100.88.238');
-
-  // CVE Signatures (combined)
-  const allCves = {};
-  Object.entries(a.all.cveCounter).forEach(([c,n]) => allCves[c] = n);
-  const cveRows = [['CVE Signatures — Combined'], [per + 'Both IPs'], [],
-    ['CVE','Events']];
-  topN(allCves,100).forEach(([c,n]) => cveRows.push([c,n]));
-  if (cveRows.length === 4) cveRows.push(['No CVE signatures recorded this period','']);
+  // 6. CVE SIGNATURES
+  const cveRows = [['CVE','Events']];
+  topN(a.cveCounter,100).forEach(([c,n]) => cveRows.push([c,n]));
+  if (cveRows.length === 1) cveRows.push(['No CVE signatures recorded this period','']);
   const sCve = aoa(cveRows); sCve['!cols'] = [{wch:38},{wch:10}];
-  styleSheet(sCve, cveRows, { headerRow:3, dataStart:4, mergeHeader:true, numericCols:[1] });
+  styleSheet(sCve, cveRows, { numericCols:[1] });
   XLSX.utils.book_append_sheet(wb, sCve, 'CVE Signatures');
 
-  // Targeted URLs (combined)
-  const urlRows = [['Targeted URLs — Combined'], [per + 'Both IPs'], [],
-    ['URL / Path','Events']];
-  topN(a.all.urlCounter,50).forEach(([u,n]) => urlRows.push([u,n]));
-  if (urlRows.length === 4) urlRows.push(['No non-root URLs recorded','']);
+  // 7. TARGETED URLS
+  const urlRows = [['URL / Path','Events']];
+  topN(a.urlCounter,50).forEach(([u,n]) => urlRows.push([u,n]));
+  if (urlRows.length === 1) urlRows.push(['No non-root URLs recorded','']);
   const sUrl = aoa(urlRows); sUrl['!cols'] = [{wch:80},{wch:10}];
-  styleSheet(sUrl, urlRows, { headerRow:3, dataStart:4, mergeHeader:true, numericCols:[1] });
+  styleSheet(sUrl, urlRows, { numericCols:[1] });
   XLSX.utils.book_append_sheet(wb, sUrl, 'Targeted URLs');
 
   return wb;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  TPP — RENDER PREVIEW TABLES
+//  TPP — RENDER DASHBOARD
 // ─────────────────────────────────────────────────────────────────────────────
-function renderTPPIP(ipNum, ipData) {
-  // Categories tab
-  let catHtml = '<table class="mini"><tr><th>Category</th><th>Events</th><th>Sources</th></tr>';
-  Object.entries(ipData.catAgg).sort((x,y)=>y[1].events-x[1].events).slice(0,10).forEach(([cat,c]) => {
-    catHtml += `<tr><td>${cat}</td><td class="num">${c.events.toLocaleString()}</td><td class="num">${c.srcs.size}</td></tr>`;
-  });
-  catHtml += '</table>';
-  document.getElementById('tpp'+ipNum+'-cat').innerHTML = catHtml;
+let TPP_CAT_CHART = null, TPP_DAY_CHART = null;
 
-  // Sources tab
-  let srcHtml = '<table class="mini"><tr><th>Source IP</th><th>Country</th><th>Events</th></tr>';
-  topN(ipData.srcCounter,10).forEach(([ip,count]) => {
-    srcHtml += `<tr><td>${ip}</td><td>${ipData.srcCountryMap[ip]||'—'}</td><td class="num">${count.toLocaleString()}</td></tr>`;
+function renderTPPResults(a, prev, labels) {
+  document.getElementById('tppResults').style.display = 'block';
+
+  const period = (labels && labels.B) ? labels.B : document.getElementById('tppPeriodLabel').value.trim();
+  document.getElementById('tppDashTitle').textContent = 'TPP Report Summary' + (period ? ' — ' + period : '');
+
+  // KPI cards
+  document.getElementById('tppSummaryGrid').innerHTML = `
+    <div class="stat-card"><div class="v">${a.total.toLocaleString()}</div><div class="l">Total events (dropped)</div></div>
+    <div class="stat-card"><div class="v">${a.critical.toLocaleString()}</div><div class="l">Critical severity</div></div>
+    <div class="stat-card"><div class="v">${a.high.toLocaleString()}</div><div class="l">High severity</div></div>
+    <div class="stat-card"><div class="v">${a.avgDaily}</div><div class="l">Avg events / day</div></div>
+  `;
+
+  // Compare block
+  const cb = document.getElementById('tppCompareBlock');
+  if (prev) {
+    const dDaily = ((a.avgDaily - prev.avgDaily) / (prev.avgDaily||1) * 100);
+    const cls = x => x>0.5?'up':(x<-0.5?'down':'flat');
+    const arrow = x => x>0.5?'▲':(x<-0.5?'▼':'▬');
+    cb.innerHTML = `
+      <div class="cmp-grid">
+        <div class="cmp-card"><div class="metric">Daily volume</div>
+          <div class="vals">${prev.avgDaily} → ${a.avgDaily}</div>
+          <div class="delta ${cls(dDaily)}">${arrow(dDaily)} ${Math.abs(dDaily).toFixed(0)}% vs ${labels&&labels.A?labels.A:'benchmark'}</div></div>
+        <div class="cmp-card"><div class="metric">Critical events</div>
+          <div class="vals">${prev.critical.toLocaleString()} → ${a.critical.toLocaleString()}</div>
+          <div class="delta ${cls(a.critical-prev.critical)}">${arrow(a.critical-prev.critical)} ${Math.abs(a.critical-prev.critical)} events</div></div>
+        <div class="cmp-card"><div class="metric">Distinct sources</div>
+          <div class="vals">${prev.distinctSrc.toLocaleString()} → ${a.distinctSrc.toLocaleString()}</div>
+          <div class="delta ${cls(a.distinctSrc-prev.distinctSrc)}">${arrow(a.distinctSrc-prev.distinctSrc)} ${Math.abs(a.distinctSrc-prev.distinctSrc)} IPs</div></div>
+      </div>`;
+  } else { cb.innerHTML = ''; }
+
+  // Charts
+  const catData = Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events).slice(0,10);
+  if (TPP_CAT_CHART) TPP_CAT_CHART.destroy();
+  TPP_CAT_CHART = new Chart(document.getElementById('tppCatChart'), {
+    type:'bar',
+    data:{ labels:catData.map(c=>c[0]), datasets:[{ data:catData.map(c=>c[1].events), backgroundColor:'#1D9E75', borderRadius:4 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}}, scales:{x:{grid:{color:'#eef'}},y:{grid:{display:false},ticks:{font:{size:10}}}} }
+  });
+
+  if (TPP_DAY_CHART) TPP_DAY_CHART.destroy();
+  TPP_DAY_CHART = new Chart(document.getElementById('tppDayChart'), {
+    type:'line',
+    data:{ labels:a.dailyRows.map(d=>d[0].slice(5)), datasets:[
+      { label:'Total', data:a.dailyRows.map(d=>d[1].total), borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.08)', fill:true, tension:0.3, pointRadius:2 },
+      { label:'Critical', data:a.dailyRows.map(d=>d[1].critical||0), borderColor:'#C0392B', backgroundColor:'transparent', tension:0.3, pointRadius:1 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true,labels:{font:{size:11},boxWidth:12}}}, scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:0,autoSkip:true,maxTicksLimit:10}},y:{grid:{color:'#eef'}}} }
+  });
+
+  // Top Sources table
+  const prevTopSrc = prev ? new Set(topN(prev.srcCounter,20).map(x=>x[0])) : null;
+  let srcHtml = '<table class="mini"><tr><th>Source IP</th><th>Country</th><th>Events</th><th></th></tr>';
+  topN(a.srcCounter,8).forEach(([ip,count]) => {
+    const isNew = prevTopSrc && !prevTopSrc.has(ip);
+    srcHtml += `<tr><td>${ip}</td><td>${a.srcCountryMap[ip]||'—'}</td><td class="num">${count.toLocaleString()}</td><td>${isNew?'<span class="tag new">new</span>':''}</td></tr>`;
   });
   srcHtml += '</table>';
-  document.getElementById('tpp'+ipNum+'-src').innerHTML = srcHtml;
+  document.getElementById('tppSrcTable').innerHTML = srcHtml;
 
-  // Signatures tab
-  let sigHtml = '<table class="mini"><tr><th>Attack Signature</th><th>Events</th></tr>';
-  topN(ipData.attackCounter,10).forEach(([sig,count]) => {
-    const short = sig.length > 58 ? sig.slice(0,58)+'…' : sig;
-    sigHtml += `<tr><td title="${sig}">${short}</td><td class="num">${count.toLocaleString()}</td></tr>`;
+  // Top Signatures table
+  const prevSigs = prev ? new Set(Object.keys(prev.attackCounter)) : null;
+  let sigHtml = '<table class="mini"><tr><th>Attack Signature</th><th>Events</th><th></th></tr>';
+  topN(a.attackCounter,8).forEach(([sig,count]) => {
+    const isNew = prevSigs && !prevSigs.has(sig);
+    const short = sig.length > 52 ? sig.slice(0,52)+'…' : sig;
+    sigHtml += `<tr><td title="${sig}">${short}</td><td class="num">${count.toLocaleString()}</td><td>${isNew?'<span class="tag new">new</span>':''}</td></tr>`;
   });
   sigHtml += '</table>';
-  document.getElementById('tpp'+ipNum+'-sig').innerHTML = sigHtml;
+  document.getElementById('tppSigTable').innerHTML = sigHtml;
 
-  // Daily Volume tab
-  let dayHtml = '<table class="mini"><tr><th>Date</th><th>Total</th><th>Critical</th><th>High</th></tr>';
-  ipData.dailyRows.forEach(([d,v]) => {
-    dayHtml += `<tr><td>${d}</td><td class="num">${v.total.toLocaleString()}</td><td class="num">${v.critical||0}</td><td class="num">${v.high||0}</td></tr>`;
+  // CVE table
+  const prevCves = prev ? new Set(Object.keys(prev.cveCounter)) : null;
+  let cveHtml = '<table class="mini"><tr><th>CVE</th><th>Events</th><th></th></tr>';
+  const cves = topN(a.cveCounter,12);
+  if (!cves.length) cveHtml += '<tr><td colspan="3" style="color:#888">No CVE-specific signatures matched this period.</td></tr>';
+  cves.forEach(([c,n]) => {
+    const isNew = prevCves && !prevCves.has(c);
+    cveHtml += `<tr><td>${c}</td><td class="num">${n}</td><td>${isNew?'<span class="tag new">new</span>':''}</td></tr>`;
   });
-  dayHtml += '</table>';
-  document.getElementById('tpp'+ipNum+'-day').innerHTML = dayHtml;
-}
-
-function renderTPPResults(a, ip1label, ip2label) {
-  const res = document.getElementById('tppResults');
-  res.style.display = 'block';
-
-  const t = document.getElementById('tppDashTitle');
-  const period = document.getElementById('tppPeriodLabel').value.trim();
-  t.textContent = 'TPP Report Summary' + (period ? ' — ' + period : '');
-
-  document.getElementById('tppIp1Title').textContent = ip1label;
-  document.getElementById('tppIp2Title').textContent = ip2label;
-
-  // Combined KPI cards
-  const g = document.getElementById('tppSummaryGrid');
-  g.innerHTML = `
-    <div class="stat-card"><div class="v">${a.all.total.toLocaleString()}</div><div class="l">Total events (both IPs)</div></div>
-    <div class="stat-card"><div class="v">${a.all.critical.toLocaleString()}</div><div class="l">Critical severity</div></div>
-    <div class="stat-card"><div class="v">${a.all.high.toLocaleString()}</div><div class="l">High severity</div></div>
-    <div class="stat-card"><div class="v">${a.all.distinctSrc.toLocaleString()}</div><div class="l">Distinct source IPs</div></div>
-  `;
-
-  // IP1 mini KPIs
-  document.getElementById('tppIp1Grid').innerHTML = `
-    <div class="stat-card"><div class="v">${a.ip1.total.toLocaleString()}</div><div class="l">Total events</div></div>
-    <div class="stat-card"><div class="v">${a.ip1.critical.toLocaleString()}</div><div class="l">Critical</div></div>
-    <div class="stat-card"><div class="v">${a.ip1.high.toLocaleString()}</div><div class="l">High</div></div>
-    <div class="stat-card"><div class="v">${a.ip1.avgDaily}</div><div class="l">Avg / day</div></div>
-  `;
-
-  // IP2 mini KPIs
-  document.getElementById('tppIp2Grid').innerHTML = `
-    <div class="stat-card"><div class="v">${a.ip2.total.toLocaleString()}</div><div class="l">Total events</div></div>
-    <div class="stat-card"><div class="v">${a.ip2.critical.toLocaleString()}</div><div class="l">Critical</div></div>
-    <div class="stat-card"><div class="v">${a.ip2.high.toLocaleString()}</div><div class="l">High</div></div>
-    <div class="stat-card"><div class="v">${a.ip2.avgDaily}</div><div class="l">Avg / day</div></div>
-  `;
-
-  renderTPPIP(1, a.ip1);
-  renderTPPIP(2, a.ip2);
-
-  // Wire preview tab clicks for both IPs
-  [1,2].forEach(ipNum => {
-    document.querySelectorAll(`.tpp-ptab[data-ip="${ipNum}"]`).forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll(`.tpp-ptab[data-ip="${ipNum}"]`).forEach(b=>b.classList.remove('active'));
-        document.querySelectorAll(`#tpp${ipNum}-cat, #tpp${ipNum}-src, #tpp${ipNum}-sig, #tpp${ipNum}-day`).forEach(p=>p.classList.remove('active'));
-        btn.classList.add('active');
-        document.getElementById('tpp'+ipNum+'-'+btn.dataset.ptab).classList.add('active');
-      });
-    });
-  });
+  cveHtml += '</table>';
+  document.getElementById('tppCveTable').innerHTML = cveHtml;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  TPP — OBSERVATIONS
 // ─────────────────────────────────────────────────────────────────────────────
-function generateTPPObservations(a, ip1label, ip2label, prev, labelA) {
+function generateTPPObservations(a, prev, labelA) {
   const obs = [];
-  const all = a.all, ip1 = a.ip1, ip2 = a.ip2;
 
-  obs.push(["info", `Total of ${all.total.toLocaleString()} dropped events recorded across ${ip1label} (${ip1.total.toLocaleString()}) and ${ip2label} (${ip2.total.toLocaleString()}).`]);
+  obs.push(["info", `${a.total.toLocaleString()} dropped events recorded over ${a.numDays} days (avg ${a.avgDaily}/day).`]);
 
-  const heavier = ip1.total >= ip2.total ? ip1label : ip2label;
-  const heavierData = ip1.total >= ip2.total ? ip1 : ip2;
-  obs.push(["info", `${heavier} received the higher volume at ${heavierData.total.toLocaleString()} events (${pct(heavierData.total,all.total)} of total).`]);
+  const topCat = Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events)[0];
+  if (topCat) obs.push(["info", `The dominant attack category was ${topCat[0]} with ${topCat[1].events.toLocaleString()} events (${pct(topCat[1].events,a.total)} of total).`]);
 
-  const topCat = Object.entries(all.catAgg).sort((x,y)=>y[1].events-x[1].events)[0];
-  if (topCat) {
-    obs.push(["info", `The dominant attack category was ${topCat[0]} with ${topCat[1].events.toLocaleString()} events (${pct(topCat[1].events,all.total)} of total).`]);
+  obs.push(["info", `Top attack signature: ${a.topAttack[0]} — ${a.topAttack[1].toLocaleString()} events.`]);
+
+  if (a.critical > 0 || a.high > 0) {
+    obs.push(["watch", `${a.critical.toLocaleString()} Critical and ${a.high.toLocaleString()} High severity events recorded. Review these signatures and confirm the targeted systems are patched.`]);
   }
 
-  obs.push(["info", `Top attack signature: ${all.topAttack[0]} — ${all.topAttack[1].toLocaleString()} events.`]);
+  const topCountries = topN(a.srcCountryCounter, 5).map(([c,n])=>`${c} (${n.toLocaleString()})`).join(', ');
+  if (topCountries) obs.push(["info", `Top source countries: ${topCountries}.`]);
 
-  if (all.critical > 0 || all.high > 0) {
-    obs.push(["watch", `${all.critical.toLocaleString()} Critical and ${all.high.toLocaleString()} High severity events were recorded. Review these signatures and confirm the targeted systems are patched.`]);
-  }
-
-  const topCountries = topN(all.srcCountryCounter, 5).map(([c,n])=>`${c} (${n.toLocaleString()})`).join(', ');
-  if (topCountries) {
-    obs.push(["info", `Top source countries: ${topCountries}.`]);
-  }
-
-  const cveList = topN(all.cveCounter, 5);
+  const cveList = topN(a.cveCounter, 5);
   if (cveList.length > 0) {
     obs.push(["watch", `CVE-tagged signatures observed: ${cveList.map(([c,n])=>c+' ('+n+')').join('; ')}. Confirm affected systems are patched.`]);
   } else {
-    obs.push(["info", "No CVE-specific signatures were matched in this period."]);
+    obs.push(["info", "No CVE-specific signatures were matched this period."]);
   }
 
-  obs.push(["info", `${all.distinctSrc.toLocaleString()} distinct source IPs from ${all.distinctCountries} countries were observed across the period.`]);
+  obs.push(["info", `${a.distinctSrc.toLocaleString()} distinct source IPs from ${a.distinctCountries} countries observed.`]);
 
-  // Comparison-driven observations
   if (prev) {
-    const dDaily = ((all.avgDaily - prev.all.avgDaily) / (prev.all.avgDaily||1) * 100);
-    if (Math.abs(dDaily) >= 10) {
-      obs.push(["watch", `Daily average volume ${dDaily>0?'rose':'fell'} ${Math.abs(dDaily).toFixed(0)}% versus ${labelA||'the benchmark period'} (${prev.all.avgDaily} → ${all.avgDaily} events/day).`]);
-    }
-    const prevCats = new Set(Object.keys(prev.all.catAgg));
-    const newCats = Object.keys(all.catAgg).filter(c => !prevCats.has(c));
+    const dDaily = ((a.avgDaily - prev.avgDaily) / (prev.avgDaily||1) * 100);
+    if (Math.abs(dDaily) >= 10) obs.push(["watch", `Daily average ${dDaily>0?'rose':'fell'} ${Math.abs(dDaily).toFixed(0)}% vs ${labelA||'benchmark'} (${prev.avgDaily} → ${a.avgDaily} events/day).`]);
+    const prevCats = new Set(Object.keys(prev.catAgg));
+    const newCats = Object.keys(a.catAgg).filter(c => !prevCats.has(c));
     if (newCats.length) obs.push(["watch", `New attack categories this period: ${newCats.join(', ')}.`]);
-    const prevCves = new Set(Object.keys(prev.all.cveCounter));
-    const newCves = Object.keys(all.cveCounter).filter(c => !prevCves.has(c));
+    const prevCves = new Set(Object.keys(prev.cveCounter));
+    const newCves = Object.keys(a.cveCounter).filter(c => !prevCves.has(c));
     if (newCves.length) obs.push(["watch", `New CVE signatures this period: ${newCves.slice(0,5).join('; ')}.`]);
-    const prevSrcs = new Set(topN(prev.all.srcCounter,20).map(x=>x[0]));
-    const newSrcs = topN(all.srcCounter,10).map(x=>x[0]).filter(ip=>!prevSrcs.has(ip));
+    const prevSrcs = new Set(topN(prev.srcCounter,20).map(x=>x[0]));
+    const newSrcs = topN(a.srcCounter,10).map(x=>x[0]).filter(ip=>!prevSrcs.has(ip));
     if (newSrcs.length) obs.push(["watch", `New source IPs in the top 10 not seen last period: ${newSrcs.slice(0,5).join(', ')}.`]);
   } else {
-    obs.push(["info", "Use the Compare tab to automatically flag volume shifts, new sources, and new CVEs versus a previous period."]);
+    obs.push(["info", "Use the Compare tab to automatically flag volume shifts, new sources, and new CVEs vs a previous period."]);
   }
 
   return obs;
@@ -1869,39 +1812,27 @@ function generateTPPObservations(a, ip1label, ip2label, prev, labelA) {
 // ─────────────────────────────────────────────────────────────────────────────
 //  TPP — COMPARISON WORKBOOK SHEET
 // ─────────────────────────────────────────────────────────────────────────────
-function buildTPPComparisonSheet(wb, a, b, labelA, labelB, ip1label, ip2label) {
+function buildTPPComparisonSheet(wb, a, b, labelA, labelB) {
   const chg = (x,y) => { const d=((y-x)/(x||1)*100); return (d>=0?'+':'')+d.toFixed(0)+'%'; };
   const rows = [
     ['TPP Period Comparison'],
     [(labelA||'Benchmark') + '  →  ' + (labelB||'Current')],
     [],
     ['Metric', labelA||'Benchmark', labelB||'Current', 'Change'],
-    ['Total events (combined)',   a.all.total,   b.all.total,   chg(a.all.total||1,   b.all.total)],
-    ['Critical severity',         a.all.critical, b.all.critical, chg(a.all.critical||0, b.all.critical)],
-    ['High severity',             a.all.high,    b.all.high,    chg(a.all.high||0,    b.all.high)],
-    ['Distinct source IPs',       a.all.distinctSrc, b.all.distinctSrc, chg(a.all.distinctSrc||1, b.all.distinctSrc)],
-    ['Distinct attack signatures',a.all.distinctSig, b.all.distinctSig, chg(a.all.distinctSig||1, b.all.distinctSig)],
-    ['Avg daily events',          a.all.avgDaily, b.all.avgDaily, chg(a.all.avgDaily||1, b.all.avgDaily)],
-    [],
-    [ip1label + ' (10.0.120.58)'],
-    ['Metric', labelA||'Benchmark', labelB||'Current', 'Change'],
-    ['Total events', a.ip1.total, b.ip1.total, chg(a.ip1.total||1, b.ip1.total)],
-    ['Critical',     a.ip1.critical, b.ip1.critical, chg(a.ip1.critical||0, b.ip1.critical)],
-    ['High',         a.ip1.high, b.ip1.high, chg(a.ip1.high||0, b.ip1.high)],
-    [],
-    [ip2label + ' (10.0.120.59)'],
-    ['Metric', labelA||'Benchmark', labelB||'Current', 'Change'],
-    ['Total events', a.ip2.total, b.ip2.total, chg(a.ip2.total||1, b.ip2.total)],
-    ['Critical',     a.ip2.critical, b.ip2.critical, chg(a.ip2.critical||0, b.ip2.critical)],
-    ['High',         a.ip2.high, b.ip2.high, chg(a.ip2.high||0, b.ip2.high)],
+    ['Total events',              a.total,        b.total,        chg(a.total||1,        b.total)],
+    ['Critical severity',         a.critical,     b.critical,     chg(a.critical||0,     b.critical)],
+    ['High severity',             a.high,         b.high,         chg(a.high||0,         b.high)],
+    ['Distinct source IPs',       a.distinctSrc,  b.distinctSrc,  chg(a.distinctSrc||1,  b.distinctSrc)],
+    ['Distinct attack signatures',a.distinctSig,  b.distinctSig,  chg(a.distinctSig||1,  b.distinctSig)],
+    ['Avg daily events',          a.avgDaily,     b.avgDaily,     chg(a.avgDaily||1,     b.avgDaily)],
     [],
     ['Attack category comparison (daily average)'],
     ['Category', (labelA||'Benchmark')+' /day', (labelB||'Current')+' /day', 'Change'],
   ];
-  const cats = new Set([...Object.keys(a.all.catAgg), ...Object.keys(b.all.catAgg)]);
+  const cats = new Set([...Object.keys(a.catAgg), ...Object.keys(b.catAgg)]);
   [...cats].forEach(cat => {
-    const av = (a.all.catAgg[cat]?.events||0) / a.all.numDays;
-    const bv = (b.all.catAgg[cat]?.events||0) / b.all.numDays;
+    const av = (a.catAgg[cat]?.events||0) / a.numDays;
+    const bv = (b.catAgg[cat]?.events||0) / b.numDays;
     rows.push([cat, av.toFixed(1), bv.toFixed(1), av>0 ? chg(av,bv) : 'new']);
   });
   const ws = XLSX.utils.aoa_to_sheet(rows);
@@ -1924,15 +1855,15 @@ function loadTPPInto(file, slot) {
     complete: res => {
       const rows = res.data.map(parseFortinetRow).filter(r => r.dstip);
       if (!rows.length) { errEl.textContent='⚠  File '+slot+' has no valid Fortinet rows.'; errEl.classList.add('show'); return; }
-      const a = analyseTPP(rows);
+      const a = analyseTPPIP(rows);
       if (slot === 'A') {
         TPP_DATA_A = a;
         document.getElementById('tppDropA').classList.add('loaded');
-        document.getElementById('tppNameA').textContent = file.name + ' — ' + a.all.total.toLocaleString() + ' events';
+        document.getElementById('tppNameA').textContent = file.name + ' — ' + a.total.toLocaleString() + ' events';
       } else {
         TPP_DATA_B = a;
         document.getElementById('tppDropB').classList.add('loaded');
-        document.getElementById('tppNameB').textContent = file.name + ' — ' + a.all.total.toLocaleString() + ' events';
+        document.getElementById('tppNameB').textContent = file.name + ' — ' + a.total.toLocaleString() + ' events';
       }
     }
   });
@@ -1942,19 +1873,16 @@ function runTPPComparison() {
   const errEl = document.getElementById('tppCmpErr');
   errEl.classList.remove('show');
   if (!TPP_DATA_A || !TPP_DATA_B) { errEl.textContent='⚠  Load both periods before generating.'; errEl.classList.add('show'); return; }
-  const labelA   = document.getElementById('tppLabelA').value.trim();
-  const labelB   = document.getElementById('tppLabelB').value.trim();
-  const ip1label = 'XX.80.0.201';
-  const ip2label = 'XX.144.0.201';
-  let wb = buildTPPWorkbook(TPP_DATA_B, ip1label, ip2label, labelB);
-  wb = buildTPPComparisonSheet(wb, TPP_DATA_A, TPP_DATA_B, labelA, labelB, ip1label, ip2label);
+  const labelA = document.getElementById('tppLabelA').value.trim();
+  const labelB = document.getElementById('tppLabelB').value.trim();
+  let wb = buildTPPWorkbook(TPP_DATA_B, labelB);
+  wb = buildTPPComparisonSheet(wb, TPP_DATA_A, TPP_DATA_B, labelA, labelB);
   const idx = wb.SheetNames.indexOf('Period Comparison');
   if (idx > 0) { wb.SheetNames.splice(idx,1); wb.SheetNames.unshift('Period Comparison'); }
   XLSX.writeFile(wb, (labelB ? labelB.replace(/[^a-z0-9]+/gi,'_') : 'TPP_Comparison')+'.xlsx');
-  // Show results in the results panel
-  document.getElementById('tppResults').style.display = 'none';
-  renderTPPResults(TPP_DATA_B, ip1label, ip2label);
-  renderTPPChecklist(generateTPPObservations(TPP_DATA_B, ip1label, ip2label, TPP_DATA_A, labelA));
+  const labels = { A: labelA, B: labelB };
+  renderTPPResults(TPP_DATA_B, TPP_DATA_A, labels);
+  renderTPPChecklist(generateTPPObservations(TPP_DATA_B, TPP_DATA_A, labelA));
   document.getElementById('tppResults').scrollIntoView({ behavior:'smooth' });
 }
 
@@ -2034,20 +1962,18 @@ function processTPPFile(file) {
         setTPPStep('analyse','active');
         setTimeout(() => {
           try {
-            const a = analyseTPP(rows);
+            const a = analyseTPPIP(rows);
             setTPPStep('analyse','done');
             setTPPStep('build','active');
             setTimeout(() => {
               try {
-                const ip1label = 'XX.80.0.201';
-                const ip2label = 'XX.144.0.201';
                 const period = document.getElementById('tppPeriodLabel').value.trim();
-                TPP_WORKBOOK = buildTPPWorkbook(a, ip1label, ip2label, period);
+                TPP_WORKBOOK = buildTPPWorkbook(a, period);
                 const fn = document.getElementById('tppFileName').value.trim();
                 TPP_OUTNAME = (fn || 'TPP_IPS_Report') + '.xlsx';
                 setTPPStep('build','done');
-                renderTPPResults(a, ip1label, ip2label);
-                renderTPPChecklist(generateTPPObservations(a, ip1label, ip2label));
+                renderTPPResults(a, null, null);
+                renderTPPChecklist(generateTPPObservations(a, null, null));
                 document.getElementById('tppResults').scrollIntoView({ behavior:'smooth' });
               } catch(e) { showTPPErr('Build error: '+e.message); }
             }, 120);
