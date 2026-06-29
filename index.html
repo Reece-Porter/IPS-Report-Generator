@@ -18,6 +18,21 @@
     --paper: #F7F8FA;
     --line: #D4DCE8;
     --green: #1D9E75;
+  }
+  /* TPP green theme — overrides blue palette across the whole page */
+  body.theme-tpp {
+    --navy:    #145c35;
+    --mid-blue:#1D9E75;
+    --steel:   #27ae60;
+    --pale:    #eef8f3;
+    --light:   #c5e8d5;
+    --line:    #c0ddd0;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(29,158,117,0.06), transparent 40%),
+      radial-gradient(circle at 88% 92%, rgba(20,92,53,0.05), transparent 40%),
+      var(--paper);
+  }
+  :root {
     --amber: #BA7517;
     --red: #C0392B;
     --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
@@ -299,7 +314,6 @@
       <button class="welcome-card tpp" id="welcomeTpp">
         <div class="wcard-badge">IPS</div>
         <div class="wcard-name">TPP</div>
-        <div class="wcard-desc">The Pharmacy Partnership</div>
         <div class="wcard-hint">Fortinet FortiGate IPS export</div>
       </button>
     </div>
@@ -1448,6 +1462,7 @@ document.getElementById('printBtn').addEventListener('click', ()=>window.print()
 //  CLIENT SELECTION — welcome screen + persistent switcher
 // ─────────────────────────────────────────────────────────────────────────────
 function selectClient(client) {
+  document.body.classList.toggle('theme-tpp', client === 'tpp');
   document.getElementById('welcomeScreen').style.display = 'none';
   document.getElementById('clientSelector').classList.add('visible');
   ['sccl','tpp'].forEach(c => {
@@ -1456,6 +1471,7 @@ function selectClient(client) {
   });
 }
 function showWelcome() {
+  document.body.classList.remove('theme-tpp');
   document.getElementById('welcomeScreen').style.display = '';
   document.getElementById('clientSelector').classList.remove('visible');
   ['sccl','tpp'].forEach(c => document.getElementById('cpane-'+c).classList.remove('active'));
