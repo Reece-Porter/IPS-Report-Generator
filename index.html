@@ -675,6 +675,29 @@ function categorise(sig) {
 const $ = id => document.getElementById(id);
 let WORKBOOK = null, OUTNAME = "IPS_Report.xlsx";
 
+// Converts a period label like "27 March – 26 April 2026" into "SCCL_MAR27_APR26"
+function periodToFilename(client, periodLabel) {
+  const MON = {january:'JAN',february:'FEB',march:'MAR',april:'APR',may:'MAY',june:'JUN',
+               july:'JUL',august:'AUG',september:'SEP',october:'OCT',november:'NOV',december:'DEC',
+               jan:'JAN',feb:'FEB',mar:'MAR',apr:'APR',jun:'JUN',jul:'JUL',aug:'AUG',
+               sep:'SEP',oct:'OCT',nov:'NOV',dec:'DEC'};
+  function parsePart(str) {
+    str = str.trim();
+    const m1 = str.match(/(\d{1,2})\s+([a-zA-Z]+)/);  // "27 March"
+    const m2 = str.match(/([a-zA-Z]+)\s+(\d{1,2})/);  // "March 27"
+    if (m1) { const mon = MON[m1[2].toLowerCase()]; if (mon) return mon + m1[1]; }
+    if (m2) { const mon = MON[m2[1].toLowerCase()]; if (mon) return mon + m2[2]; }
+    return null;
+  }
+  if (!periodLabel) return client + '_IPS_Report';
+  const parts = periodLabel.split(/\s*[–—\-]\s*/);
+  const start = parsePart(parts[0] || '');
+  const end   = parsePart(parts[1] || '');
+  if (start && end) return client + '_' + start + '_' + end;
+  if (start)        return client + '_' + start;
+  return client + '_IPS_Report';
+}
+
 function setStep(name, state) {
   document.querySelectorAll('.step').forEach(el => {
     if (el.dataset.step === name) {
@@ -1225,7 +1248,7 @@ function processFile(file) {
                     const period = $('periodLabel').value.trim();
                     WORKBOOK = buildWorkbook(a, period);
                     const fn = $('fileName').value.trim();
-                    OUTNAME = (fn || "IPS_Report") + ".xlsx";
+                    OUTNAME = (fn || periodToFilename('SCCL', period)) + ".xlsx";
                     setStep('build','done');
                     LAST_ANALYSIS = a;
                     const lbl = $('periodLabel').value.trim();
@@ -1429,7 +1452,7 @@ async function runComparison() {
   // move comparison sheet to front
   const idx = wb.SheetNames.indexOf("Period Comparison");
   if (idx > -1) { wb.SheetNames.splice(idx,1); wb.SheetNames.unshift("Period Comparison"); }
-  XLSX.writeFile(wb, (labelB? labelB.replace(/[^a-z0-9]+/gi,"_") : "IPS_Comparison")+".xlsx");
+  XLSX.writeFile(wb, periodToFilename('SCCL', labelB) + "_vs_" + periodToFilename('SCCL', labelA).replace('SCCL_','') + ".xlsx");
   // checklist using B vs A
   const labels = { A: document.getElementById('labelA').value.trim(), B: document.getElementById('labelB').value.trim() };
   renderSummary(DATA_B, DATA_A, labels);
@@ -1895,7 +1918,7 @@ function runTPPComparison() {
   wb = buildTPPComparisonSheet(wb, TPP_DATA_A, TPP_DATA_B, labelA, labelB);
   const idx = wb.SheetNames.indexOf('Period Comparison');
   if (idx > 0) { wb.SheetNames.splice(idx,1); wb.SheetNames.unshift('Period Comparison'); }
-  XLSX.writeFile(wb, (labelB ? labelB.replace(/[^a-z0-9]+/gi,'_') : 'TPP_Comparison')+'.xlsx');
+  XLSX.writeFile(wb, periodToFilename('TPP', labelB) + '_vs_' + periodToFilename('TPP', labelA).replace('TPP_','') + '.xlsx');
   const labels = { A: labelA, B: labelB };
   renderTPPResults(TPP_DATA_B, TPP_DATA_A, labels);
   renderTPPChecklist(generateTPPObservations(TPP_DATA_B, TPP_DATA_A, labelA));
@@ -1986,7 +2009,7 @@ function processTPPFile(file) {
                 const period = document.getElementById('tppPeriodLabel').value.trim();
                 TPP_WORKBOOK = buildTPPWorkbook(a, period);
                 const fn = document.getElementById('tppFileName').value.trim();
-                TPP_OUTNAME = (fn || 'TPP_IPS_Report') + '.xlsx';
+                TPP_OUTNAME = (fn || periodToFilename('TPP', period)) + '.xlsx';
                 setTPPStep('build','done');
                 renderTPPResults(a, null, null);
                 renderTPPChecklist(generateTPPObservations(a, null, null));
