@@ -231,6 +231,38 @@
   .cmp-card .vals { font-size:15px; font-weight:600; color:var(--ink); margin-top:4px; }
   .cmp-card .delta { font-size:12px; font-weight:600; margin-top:3px; }
   .delta.up { color:#C0392B; } .delta.down { color:#1D9E75; } .delta.flat { color:#888; }
+  /* traffic action / severity breakdown */
+  .traffic-split-card {
+    background:#fff; border:1px solid var(--line); border-radius:14px;
+    padding:20px 24px; margin:12px 0 16px;
+  }
+  .traffic-split-card .ts-title {
+    font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.05em;
+    color:#5f6b7d; margin-bottom:10px;
+  }
+  .ts-bar-track {
+    height:8px; border-radius:4px; background:#f0f0f0;
+    display:flex; overflow:hidden; margin-bottom:14px;
+  }
+  .ts-bar-seg { height:100%; }
+  .ts-bar-seg.prevent  { background:var(--green); }
+  .ts-bar-seg.accept   { background:var(--amber); }
+  .ts-bar-seg.critical { background:#C0392B; }
+  .ts-bar-seg.high     { background:#E67E22; }
+  .ts-bar-seg.low      { background:#95a5a6; }
+  .ts-panels { display:flex; gap:0; }
+  .ts-panel { flex:1; padding:0 16px; }
+  .ts-panel:first-child { padding-left:0; }
+  .ts-panel:not(:first-child) { border-left:1px solid var(--line); }
+  .ts-panel .ts-lbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; margin-bottom:3px; }
+  .ts-panel.prevent .ts-lbl  { color:var(--green); }
+  .ts-panel.accept  .ts-lbl  { color:var(--amber); }
+  .ts-panel.critical .ts-lbl { color:#C0392B; }
+  .ts-panel.high .ts-lbl     { color:#E67E22; }
+  .ts-panel.low .ts-lbl      { color:#95a5a6; }
+  .ts-panel .ts-num { font-size:20px; font-weight:700; color:var(--ink); }
+  .ts-panel .ts-pct { font-size:12px; font-weight:600; color:#5f6b7d; margin-left:4px; }
+  .ts-panel .ts-sev { font-size:10px; color:#5f6b7d; margin-top:3px; line-height:1.5; }
   /* === WELCOME SCREEN === */
   .welcome-screen { display:flex; flex-direction:column; align-items:center; padding:64px 24px 48px; }
   .welcome-h { font-size:26px; font-weight:700; color:var(--navy); text-align:center; }
@@ -401,6 +433,7 @@
     </div>
     <div class="summary-grid" id="summary"></div>
     <div id="compareBlock"></div>
+    <div id="trafficSplit"></div>
     <div class="dash-charts">
       <div class="chart-card">
         <div class="chart-h">Attack Categories</div>
@@ -534,6 +567,7 @@
 
       <div class="summary-grid" id="tppSummaryGrid"></div>
       <div id="tppCompareBlock"></div>
+      <div id="tppTrafficSplit"></div>
 
       <div class="dash-charts">
         <div class="chart-card">
@@ -1114,8 +1148,8 @@ function renderSummary(a, prev, labels) {
   g.style.display = 'grid';
   g.innerHTML = `
     <div class="stat-card"><div class="v">${a.total.toLocaleString()}</div><div class="l">Total events</div></div>
-    <div class="stat-card prevent"><div class="v">${pct(a.prevent,a.total)}</div><div class="l">Prevention rate</div></div>
-    <div class="stat-card accept"><div class="v">${pct(a.accept,a.total)}</div><div class="l">Accept rate</div></div>
+    <div class="stat-card prevent"><div class="v">${a.prevent.toLocaleString()}</div><div class="l">Prevented &nbsp;·&nbsp; ${pct(a.prevent,a.total)}</div></div>
+    <div class="stat-card accept"><div class="v">${a.accept.toLocaleString()}</div><div class="l">Accepted &nbsp;·&nbsp; ${pct(a.accept,a.total)}</div></div>
     <div class="stat-card"><div class="v">${a.avgDaily}</div><div class="l">Avg events / day</div></div>
   `;
 
@@ -1142,6 +1176,30 @@ function renderSummary(a, prev, labels) {
   } else {
     cb.innerHTML = '';
   }
+
+  // traffic action breakdown
+  const preventPct = (a.prevent / (a.total || 1) * 100).toFixed(1);
+  const acceptPct  = (a.accept  / (a.total || 1) * 100).toFixed(1);
+  document.getElementById('trafficSplit').innerHTML = `
+    <div class="traffic-split-card">
+      <div class="ts-title">Traffic Action Breakdown</div>
+      <div class="ts-bar-track">
+        <div class="ts-bar-seg prevent" style="width:${preventPct}%"></div>
+        <div class="ts-bar-seg accept"  style="width:${acceptPct}%"></div>
+      </div>
+      <div class="ts-panels">
+        <div class="ts-panel prevent">
+          <div class="ts-lbl">Prevented (Blocked)</div>
+          <div class="ts-num">${a.prevent.toLocaleString()}<span class="ts-pct">${preventPct}%</span></div>
+          <div class="ts-sev">Critical: ${a.crit.toLocaleString()} &nbsp;·&nbsp; High: ${a.high.toLocaleString()} &nbsp;·&nbsp; Medium: ${a.med.toLocaleString()}</div>
+        </div>
+        <div class="ts-panel accept">
+          <div class="ts-lbl">Accepted (Allowed Through)</div>
+          <div class="ts-num">${a.accept.toLocaleString()}<span class="ts-pct">${acceptPct}%</span></div>
+          <div class="ts-sev">Traffic matched IPS rules but was permitted to pass through</div>
+        </div>
+      </div>
+    </div>`;
 
   // charts
   const catData = Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events).slice(0,10);
@@ -1744,6 +1802,34 @@ function renderTPPResults(a, prev, labels) {
           <div class="delta ${cls(a.distinctSrc-prev.distinctSrc)}">${arrow(a.distinctSrc-prev.distinctSrc)} ${Math.abs(a.distinctSrc-prev.distinctSrc)} IPs</div></div>
       </div>`;
   } else { cb.innerHTML = ''; }
+
+  // severity breakdown (all TPP traffic is blocked/dropped)
+  const critPct = (a.critical / (a.total || 1) * 100).toFixed(1);
+  const highPct = (a.high     / (a.total || 1) * 100).toFixed(1);
+  const lowPct  = (a.low      / (a.total || 1) * 100).toFixed(1);
+  document.getElementById('tppTrafficSplit').innerHTML = `
+    <div class="traffic-split-card">
+      <div class="ts-title">Severity Breakdown — All Traffic Blocked</div>
+      <div class="ts-bar-track">
+        <div class="ts-bar-seg critical" style="width:${critPct}%"></div>
+        <div class="ts-bar-seg high"     style="width:${highPct}%"></div>
+        <div class="ts-bar-seg low"      style="width:${lowPct}%"></div>
+      </div>
+      <div class="ts-panels">
+        <div class="ts-panel critical">
+          <div class="ts-lbl">Critical</div>
+          <div class="ts-num">${a.critical.toLocaleString()}<span class="ts-pct">${critPct}%</span></div>
+        </div>
+        <div class="ts-panel high">
+          <div class="ts-lbl">High</div>
+          <div class="ts-num">${a.high.toLocaleString()}<span class="ts-pct">${highPct}%</span></div>
+        </div>
+        <div class="ts-panel low">
+          <div class="ts-lbl">Low</div>
+          <div class="ts-num">${a.low.toLocaleString()}<span class="ts-pct">${lowPct}%</span></div>
+        </div>
+      </div>
+    </div>`;
 
   // Charts
   const catData = Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events).slice(0,10);
