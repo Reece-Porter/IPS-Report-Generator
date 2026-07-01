@@ -434,6 +434,10 @@
     <div class="summary-grid" id="summary"></div>
     <div id="compareBlock"></div>
     <div id="trafficSplit"></div>
+    <div class="tbl-card full" id="srcBreakdownCard" style="display:none;">
+      <div class="tbl-h">Traffic by Source IP — Denied vs Accepted</div>
+      <div id="srcBreakdown"></div>
+    </div>
     <div class="dash-charts">
       <div class="chart-card">
         <div class="chart-h">Attack Categories</div>
@@ -1099,10 +1103,14 @@ function buildWorkbook(a, periodLabel) {
   XLSX.utils.book_append_sheet(wb, s4, "Destinations");
 
   // 5. CVE SIGNATURES
-  const cveRows = [["CVE Signature","Events"]];
-  topN(a.cveCounter,40).forEach(([sig,ev])=>cveRows.push([sig,ev]));
-  const s5 = aoa(cveRows); s5['!cols']=[{wch:75},{wch:8}];
-  styleSheet(s5, cveRows, { numericCols:[1] });
+  const allCveKeysXl = new Set([...Object.keys(a.cveCounter), ...Object.keys(a.acceptCveCounter)]);
+  const cveRows = [["CVE Signature","Denied / Blocked","Accepted","Total"]];
+  Array.from(allCveKeysXl).map(s=>([s,(a.cveCounter[s]||0)+(a.acceptCveCounter[s]||0)])).sort((x,y)=>y[1]-x[1]).slice(0,40).forEach(([sig])=>{
+    const d_ = a.cveCounter[sig]||0; const ac_ = a.acceptCveCounter[sig]||0;
+    cveRows.push([sig, d_, ac_, d_+ac_]);
+  });
+  const s5 = aoa(cveRows); s5['!cols']=[{wch:75},{wch:16},{wch:10},{wch:8}];
+  styleSheet(s5, cveRows, { numericCols:[3], preventCol:1, acceptCol:2 });
   XLSX.utils.book_append_sheet(wb, s5, "CVE Signatures");
 
   // 6. TARGETED URLS
@@ -1113,7 +1121,7 @@ function buildWorkbook(a, periodLabel) {
   XLSX.utils.book_append_sheet(wb, s6, "Targeted URLs");
 
   // 7. DAILY VOLUME
-  const dvRows = [["Date","Total","Prevent","Accept","Sig. Critical","Sig. High"]];
+  const dvRows = [["Date","Total","Denied","Accepted","Sig. Critical","Sig. High"]];
   a.dailyRows.forEach(([d,v])=>dvRows.push([d,v.total,v.prevent,v.accept,v.crit,v.high]));
   // totals row
   const tot = a.dailyRows.reduce((acc,[,v])=>{acc.t+=v.total;acc.p+=v.prevent;acc.a+=v.accept;acc.c+=v.crit;acc.h+=v.high;return acc;},{t:0,p:0,a:0,c:0,h:0});
@@ -1122,15 +1130,19 @@ function buildWorkbook(a, periodLabel) {
   styleSheet(s7, dvRows, { numericCols:[1], preventCol:2, acceptCol:3, severityCols:{crit:4,high:5}, totalsRow: dvRows.length-1 });
   XLSX.utils.book_append_sheet(wb, s7, "Daily Volume");
 
-  // 8. ALL SIGNATURES
-  const allRows = [["Signature Name","Events"]];
-  topN(a.sigCounter, 200).forEach(([sig,ev])=>allRows.push([sig,ev]));
-  const s8 = aoa(allRows); s8['!cols']=[{wch:75},{wch:8}];
-  styleSheet(s8, allRows, { numericCols:[1] });
+  // 8. ALL SIGNATURES (with denied/accepted split)
+  const allSigKeysXl = new Set([...Object.keys(a.sigCounter), ...Object.keys(a.acceptSigCounter)]);
+  const allRows = [["Signature Name","Denied / Blocked","Accepted","Total"]];
+  Array.from(allSigKeysXl).map(s=>([s,(a.sigCounter[s]||0)+(a.acceptSigCounter[s]||0)])).sort((x,y)=>y[1]-x[1]).slice(0,200).forEach(([sig])=>{
+    const d_ = a.sigCounter[sig]||0; const ac_ = a.acceptSigCounter[sig]||0;
+    allRows.push([sig, d_, ac_, d_+ac_]);
+  });
+  const s8 = aoa(allRows); s8['!cols']=[{wch:75},{wch:16},{wch:10},{wch:8}];
+  styleSheet(s8, allRows, { numericCols:[3], preventCol:1, acceptCol:2 });
   XLSX.utils.book_append_sheet(wb, s8, "All Signatures");
 
   // 9. ACCEPT EVENTS
-  const accRows = [["Source IP","Accept Events","% of Total Accept","Prevent Events (same IP)","Accept % of IP traffic"]];
+  const accRows = [["Source IP","Accept Events","% of Total Accept","Denied Events (same IP)","Accept % of IP traffic"]];
   topN(a.acceptSrcCounter,15).forEach(([ip,acc])=>{
     const d = a.sourceDetail(ip);
     const ipTotal = d.total || 1;
@@ -1159,8 +1171,8 @@ function renderSummary(a, prev, labels) {
   g.style.display = 'grid';
   g.innerHTML = `
     <div class="stat-card"><div class="v">${a.total.toLocaleString()}</div><div class="l">Total events</div></div>
-    <div class="stat-card prevent"><div class="v">${a.prevent.toLocaleString()}</div><div class="l">Prevented &nbsp;·&nbsp; ${pct(a.prevent,a.total)}</div></div>
-    <div class="stat-card accept"><div class="v">${a.accept.toLocaleString()}</div><div class="l">Accepted &nbsp;·&nbsp; ${pct(a.accept,a.total)}</div></div>
+    <div class="stat-card prevent"><div class="v">${a.prevent.toLocaleString()}</div><div class="l">Denied / Blocked &nbsp;·&nbsp; ${pct(a.prevent,a.total)}</div></div>
+    <div class="stat-card accept"><div class="v">${a.accept.toLocaleString()}</div><div class="l">Accepted / Allowed &nbsp;·&nbsp; ${pct(a.accept,a.total)}</div></div>
     <div class="stat-card"><div class="v">${a.avgDaily}</div><div class="l">Avg events / day</div></div>
   `;
 
@@ -1177,7 +1189,7 @@ function renderSummary(a, prev, labels) {
         <div class="cmp-card"><div class="metric">Daily volume</div>
           <div class="vals">${prev.avgDaily} → ${a.avgDaily}</div>
           <div class="delta ${cls(dDaily)}">${arrow(dDaily)} ${Math.abs(dDaily).toFixed(0)}% vs ${labels&&labels.A?labels.A:'benchmark'}</div></div>
-        <div class="cmp-card"><div class="metric">Prevention rate</div>
+        <div class="cmp-card"><div class="metric">Denial rate</div>
           <div class="vals">${pA.toFixed(1)}% → ${pB.toFixed(1)}%</div>
           <div class="delta ${cls(pB-pA)}">${arrow(pB-pA)} ${Math.abs(pB-pA).toFixed(1)} pts</div></div>
         <div class="cmp-card"><div class="metric">Accept rate</div>
@@ -1188,7 +1200,7 @@ function renderSummary(a, prev, labels) {
     cb.innerHTML = '';
   }
 
-  // traffic action breakdown
+  // traffic action breakdown card
   const preventPct = (a.prevent / (a.total || 1) * 100).toFixed(1);
   const acceptPct  = (a.accept  / (a.total || 1) * 100).toFixed(1);
   document.getElementById('trafficSplit').innerHTML = `
@@ -1200,17 +1212,56 @@ function renderSummary(a, prev, labels) {
       </div>
       <div class="ts-panels">
         <div class="ts-panel prevent">
-          <div class="ts-lbl">Prevented (Blocked)</div>
+          <div class="ts-lbl">Denied / Blocked</div>
           <div class="ts-num">${a.prevent.toLocaleString()}<span class="ts-pct">${preventPct}%</span></div>
           <div class="ts-sev">Critical: ${a.crit.toLocaleString()} &nbsp;·&nbsp; High: ${a.high.toLocaleString()} &nbsp;·&nbsp; Medium: ${a.med.toLocaleString()}</div>
         </div>
         <div class="ts-panel accept">
-          <div class="ts-lbl">Accepted (Allowed Through)</div>
+          <div class="ts-lbl">Accepted / Allowed Through</div>
           <div class="ts-num">${a.accept.toLocaleString()}<span class="ts-pct">${acceptPct}%</span></div>
           <div class="ts-sev">Traffic matched IPS rules but was permitted to pass through</div>
         </div>
       </div>
     </div>`;
+
+  // per-source denied vs accepted breakdown (prominent full-width section)
+  const srcCard = document.getElementById('srcBreakdownCard');
+  if (a.total > 0) {
+    srcCard.style.display = '';
+    const allSrcs = topN(a.srcCounter, 25);
+    let sbHtml = `
+      <table class="mini src-breakdown-tbl">
+        <thead><tr>
+          <th>Source IP</th>
+          <th class="num" style="color:var(--green)">Denied / Blocked</th>
+          <th class="num" style="color:var(--green)">Denied %</th>
+          <th class="num" style="color:var(--amber)">Accepted</th>
+          <th class="num" style="color:var(--amber)">Accepted %</th>
+          <th class="num">Total</th>
+          <th></th>
+        </tr></thead><tbody>`;
+    allSrcs.forEach(([ip, tot]) => {
+      const d = a.sourceDetail(ip);
+      const dPct = tot ? (d.prevent / tot * 100).toFixed(0) : '0';
+      const aPct = tot ? (d.accept  / tot * 100).toFixed(0) : '0';
+      const hiAccept = d.accept > 0 && (d.accept / tot * 100) > 30;
+      const newTag = (prev && !topN(prev.srcCounter,25).some(x=>x[0]===ip)) ? '<span class="tag new">new</span>' : '';
+      const accTag = hiAccept ? '<span class="tag acc">high accept</span>' : '';
+      sbHtml += `<tr>
+        <td><strong>${ip}</strong></td>
+        <td class="num" style="color:var(--green)">${d.prevent.toLocaleString()}</td>
+        <td class="num" style="color:var(--green)">${dPct}%</td>
+        <td class="num" style="color:${d.accept>0?'var(--amber)':'#aaa'}">${d.accept.toLocaleString()}</td>
+        <td class="num" style="color:${d.accept>0?'var(--amber)':'#aaa'}">${aPct}%</td>
+        <td class="num">${tot.toLocaleString()}</td>
+        <td>${accTag}${newTag}</td>
+      </tr>`;
+    });
+    sbHtml += '</tbody></table>';
+    document.getElementById('srcBreakdown').innerHTML = sbHtml;
+  } else {
+    srcCard.style.display = 'none';
+  }
 
   // charts
   const catData = Object.entries(a.catAgg).sort((x,y)=>y[1].events-x[1].events).slice(0,10);
@@ -1236,7 +1287,7 @@ function renderSummary(a, prev, labels) {
 
   // tables
   const prevTopSrc = prev ? new Set(topN(prev.srcCounter,20).map(x=>x[0])) : null;
-  let srcHtml = '<table class="mini"><tr><th>Source IP</th><th>Prevented</th><th>Accepted</th><th>Total</th><th></th></tr>';
+  let srcHtml = '<table class="mini"><tr><th>Source IP</th><th>Denied</th><th>Accepted</th><th>Total</th><th></th></tr>';
   topN(a.srcCounter,8).forEach(([ip,tot])=>{
     const d = a.sourceDetail(ip);
     const accPct = d.total ? (d.accept/d.total*100) : 0;
@@ -1248,7 +1299,7 @@ function renderSummary(a, prev, labels) {
   srcHtml += '</table>';
   document.getElementById('srcTable').innerHTML = srcHtml;
 
-  let dstHtml = '<table class="mini"><tr><th>Endpoint</th><th>Prevented</th><th>Accepted</th><th>Total</th><th>Sources</th></tr>';
+  let dstHtml = '<table class="mini"><tr><th>Endpoint</th><th>Denied</th><th>Accepted</th><th>Total</th><th>Sources</th></tr>';
   topN(a.dstCounter,8).forEach(([ep,tot])=>{
     const d = a.destDetail(ep);
     const short = ep.length>30 ? ep.slice(0,30)+'…' : ep;
@@ -1261,7 +1312,7 @@ function renderSummary(a, prev, labels) {
   const prevSigKeys = prev ? new Set(Object.keys(prev.sigCounter)) : null;
   const allSigKeys = new Set([...Object.keys(a.sigCounter), ...Object.keys(a.acceptSigCounter)]);
   const combinedSigs = Array.from(allSigKeys).map(s=>([s, (a.sigCounter[s]||0)+(a.acceptSigCounter[s]||0)])).sort((x,y)=>y[1]-x[1]).slice(0,15);
-  let sigHtml = '<table class="mini"><tr><th>Signature</th><th>Prevented</th><th>Accepted</th><th>Total</th><th></th></tr>';
+  let sigHtml = '<table class="mini"><tr><th>Signature</th><th>Denied</th><th>Accepted</th><th>Total</th><th></th></tr>';
   if (combinedSigs.length===0) sigHtml += '<tr><td colspan="5" style="color:#888">No signatures found.</td></tr>';
   combinedSigs.forEach(([sig, tot])=>{
     const prev_ = a.sigCounter[sig]||0;
